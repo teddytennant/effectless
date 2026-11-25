@@ -174,6 +174,7 @@ pub struct Select {
     disabled: bool,
     invalid: bool,
     width: Option<Pixels>,
+    popup_align: Option<gpui_base::Align>,
 }
 
 impl Select {
@@ -189,7 +190,15 @@ impl Select {
             disabled: false,
             invalid: false,
             width: None,
+            popup_align: None,
         }
+    }
+
+    /// Opens the list below the trigger with this alignment instead of over it
+    /// (settings selects align to the trigger's end).
+    pub fn popup_align(mut self, align: gpui_base::Align) -> Self {
+        self.popup_align = Some(align);
+        self
     }
 
     pub fn selected(mut self, value: impl Into<SharedString>) -> Self {
@@ -268,6 +277,7 @@ impl RenderOnce for Select {
         let options = self.options.clone();
         let selected = self.selected.clone();
         let on_change = self.on_change.clone();
+        let popup_align = self.popup_align;
         let label_color = if current.is_none() {
             t.placeholder
         } else if ghost && !open {
@@ -368,9 +378,17 @@ impl RenderOnce for Select {
             let top = trigger.origin.y + (trigger.size.height - px(ITEM_HEIGHT)) / 2.
                 - px(1. + 4. + ITEM_HEIGHT * k);
             let left = trigger.origin.x + px(pad) - px(1. + 4. + 8.);
-            let anchor = PopupAnchor::Point {
-                position: point(left, top),
-                trigger: Some(trigger),
+            let anchor = match popup_align {
+                Some(align) => PopupAnchor::Trigger {
+                    bounds: trigger,
+                    placement: gpui_base::Placement::Bottom,
+                    align,
+                    offset: px(4.),
+                },
+                None => PopupAnchor::Point {
+                    position: point(left, top),
+                    trigger: Some(trigger),
+                },
             };
             let options = options.clone();
             let selected = selected.clone();
@@ -384,7 +402,11 @@ impl RenderOnce for Select {
                         highlighted: selected_ix,
                         selected,
                         on_change,
-                        min_width: trigger.size.width + px(26. - 2. * pad),
+                        min_width: if popup_align.is_some() {
+                            trigger.size.width
+                        } else {
+                            trigger.size.width + px(26. - 2. * pad)
+                        },
                         focus: cx.focus_handle(),
                     });
                     let focus = view.read(cx).focus.clone();
