@@ -9,11 +9,13 @@
 //!   overlay hosts.
 //! - `app_state`: `AppState` (route, layout); `store`: `Store` (engine data).
 //! - `views`: the content views other work fills in.
+//! - `markdown`: markdown → GPUI (chat replies, plans, descriptions).
 
 pub mod app_state;
 pub mod assets;
 pub mod fixtures;
 pub mod gallery;
+pub mod markdown;
 pub mod shell;
 pub mod store;
 pub mod theme;
