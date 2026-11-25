@@ -1,0 +1,22 @@
+#!/bin/sh
+# Stand-in `codex` for process-failure tests. FAKE_MODE: crash | garbage | ok.
+if [ "$1" = "--version" ]; then echo "codex-cli 0.160.1"; exit 0; fi
+while IFS= read -r line; do
+  id=$(printf '%s\n' "$line" | sed -n 's/.*"id":\([0-9][0-9]*\).*/\1/p')
+  method=$(printf '%s\n' "$line" | sed -n 's/.*"method":"\([^"]*\)".*/\1/p')
+  case "$method" in
+    initialize) echo "{\"id\":$id,\"result\":{\"userAgent\":\"Tern/0.160.1 (Linux; x86_64)\",\"codexHome\":\"/tmp\",\"platformFamily\":\"unix\",\"platformOs\":\"linux\"}}" ;;
+    account/read) echo "{\"id\":$id,\"result\":{\"account\":{\"type\":\"apiKey\"},\"requiresOpenaiAuth\":true}}" ;;
+    model/list) echo "{\"id\":$id,\"result\":{\"data\":[{\"id\":\"gpt-6-luna\",\"model\":\"gpt-6-luna\",\"displayName\":\"GPT-6-Luna\",\"description\":\"Fast\",\"hidden\":false,\"isDefault\":true,\"defaultReasoningEffort\":\"low\",\"supportedReasoningEfforts\":[{\"reasoningEffort\":\"low\",\"description\":\"Fast\"}]}],\"nextCursor\":null}}" ;;
+    thread/start) echo "{\"id\":$id,\"result\":{\"thread\":{\"id\":\"thr_fake\"}}}" ;;
+    config/read) echo "{\"id\":$id,\"result\":{\"config\":{}}}" ;;
+    turn/start)
+      echo "{\"id\":$id,\"result\":{\"turn\":{\"id\":\"turn_fake\",\"status\":\"inProgress\",\"startedAt\":1,\"items\":[]}}}"
+      echo '{"method":"item/started","params":{"threadId":"thr_fake","turnId":"turn_fake","item":{"type":"commandExecution","id":"cmd_1","command":"sleep 5","cwd":"/","commandActions":[],"status":"inProgress"}}}'
+      echo '{"method":"item/agentMessage/delta","params":{"threadId":"thr_fake","turnId":"turn_fake","itemId":"msg_1","delta":"partial"}}'
+      case "$FAKE_MODE" in
+        crash) echo "error: fake codex crashed" >&2; exit 3 ;;
+        garbage) echo "this is not json" ;;
+      esac ;;
+  esac
+done

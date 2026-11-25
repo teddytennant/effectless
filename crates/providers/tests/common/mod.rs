@@ -25,7 +25,9 @@ pub enum Proto {
 }
 
 pub fn fixture(rel: &str) -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures").join(rel)
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures")
+        .join(rel)
 }
 
 pub fn load(rel: &str) -> Vec<Value> {
@@ -38,7 +40,7 @@ pub fn load(rel: &str) -> Vec<Value> {
 }
 
 /// The first expected client frame matching `pred`.
-pub fn expected<'a>(entries: &'a [Value], pred: impl Fn(&Value) -> bool) -> Option<&'a Value> {
+pub fn expected(entries: &[Value], pred: impl Fn(&Value) -> bool) -> Option<&Value> {
     entries
         .iter()
         .filter(|e| e["type"] == "expect_outbound")
@@ -55,8 +57,13 @@ fn key(proto: Proto, f: &Value) -> String {
             _ => "?".into(),
         },
         Proto::Claude => match f["type"].as_str() {
-            Some("control_request") => format!("ctrl:{}", f["request"]["subtype"].as_str().unwrap_or("")),
-            Some("control_response") => format!("ctrlresp:{}", f["response"]["request_id"].as_str().unwrap_or("")),
+            Some("control_request") => {
+                format!("ctrl:{}", f["request"]["subtype"].as_str().unwrap_or(""))
+            }
+            Some("control_response") => format!(
+                "ctrlresp:{}",
+                f["response"]["request_id"].as_str().unwrap_or("")
+            ),
             Some(t) => t.to_string(),
             None => "?".into(),
         },
@@ -69,7 +76,14 @@ pub struct Fake {
 }
 
 /// Starts the fake peer; returns the client's ends of the pipe.
-pub fn spawn_fake(proto: Proto, entries: Vec<Value>) -> (ReadHalf<DuplexStream>, WriteHalf<DuplexStream>, tokio::task::JoinHandle<Fake>) {
+pub fn spawn_fake(
+    proto: Proto,
+    entries: Vec<Value>,
+) -> (
+    ReadHalf<DuplexStream>,
+    WriteHalf<DuplexStream>,
+    tokio::task::JoinHandle<Fake>,
+) {
     let (client, server) = tokio::io::duplex(1 << 20);
     let (cr, cw) = tokio::io::split(client);
     let (sr, mut sw) = tokio::io::split(server);
@@ -83,7 +97,12 @@ pub fn spawn_fake(proto: Proto, entries: Vec<Value>) -> (ReadHalf<DuplexStream>,
             .iter()
             .filter_map(|e| {
                 let t = e["type"].as_str()?;
-                matches!(t, "expect_outbound" | "emit_inbound" | "server_exit").then(|| (t.to_string(), e.get("frame").cloned().unwrap_or(Value::Null)))
+                matches!(t, "expect_outbound" | "emit_inbound" | "server_exit").then(|| {
+                    (
+                        t.to_string(),
+                        e.get("frame").cloned().unwrap_or(Value::Null),
+                    )
+                })
             })
             .collect();
         macro_rules! write_frame {
@@ -105,16 +124,21 @@ pub fn spawn_fake(proto: Proto, entries: Vec<Value>) -> (ReadHalf<DuplexStream>,
                     let mut f = frame.clone();
                     match proto {
                         Proto::Codex => {
-                            if f.get("method").is_none() {
-                                if let Some(mapped) = f.get("id").and_then(|id| ids.get(&id.to_string())) {
-                                    f["id"] = mapped.clone();
-                                }
+                            if f.get("method").is_none()
+                                && let Some(mapped) =
+                                    f.get("id").and_then(|id| ids.get(&id.to_string()))
+                            {
+                                f["id"] = mapped.clone();
                             }
                         }
                         Proto::Claude => {
                             if f["type"] == "control_response" {
                                 let rid = f["response"]["request_id"].clone();
-                                if let Some(m) = ids.get(&rid.to_string()).cloned().or_else(|| (rid == "*").then(|| last_ctrl.clone()).flatten()) {
+                                if let Some(m) = ids
+                                    .get(&rid.to_string())
+                                    .cloned()
+                                    .or_else(|| (rid == "*").then(|| last_ctrl.clone()).flatten())
+                                {
                                     f["response"]["request_id"] = m;
                                 }
                             }
@@ -125,11 +149,17 @@ pub fn spawn_fake(proto: Proto, entries: Vec<Value>) -> (ReadHalf<DuplexStream>,
                 }
                 _ => {
                     let want = key(proto, frame);
-                    let line = match tokio::time::timeout(Duration::from_secs(20), lines.next_line()).await {
+                    let line = match tokio::time::timeout(
+                        Duration::from_secs(20),
+                        lines.next_line(),
+                    )
+                    .await
+                    {
                         Ok(Ok(Some(l))) => l,
                         _ => return Fake { client_frames: log },
                     };
-                    let got: Value = serde_json::from_str(&line).unwrap_or_else(|e| panic!("client wrote bad json {line}: {e}"));
+                    let got: Value = serde_json::from_str(&line)
+                        .unwrap_or_else(|e| panic!("client wrote bad json {line}: {e}"));
                     log.push(got.clone());
                     let got_key = key(proto, &got);
                     if got_key == want {
@@ -142,7 +172,10 @@ pub fn spawn_fake(proto: Proto, entries: Vec<Value>) -> (ReadHalf<DuplexStream>,
                             Proto::Claude => {
                                 if got["type"] == "control_request" {
                                     last_ctrl = Some(got["request_id"].clone());
-                                    ids.insert(frame["request_id"].to_string(), got["request_id"].clone());
+                                    ids.insert(
+                                        frame["request_id"].to_string(),
+                                        got["request_id"].clone(),
+                                    );
                                 }
                             }
                         }
@@ -150,7 +183,9 @@ pub fn spawn_fake(proto: Proto, entries: Vec<Value>) -> (ReadHalf<DuplexStream>,
                         continue;
                     }
                     // The client skipped something T3 sent: jump to where this frame is expected.
-                    let later = script[i..].iter().position(|(t, f)| t == "expect_outbound" && key(proto, f) == got_key);
+                    let later = script[i..]
+                        .iter()
+                        .position(|(t, f)| t == "expect_outbound" && key(proto, f) == got_key);
                     if let Some(off) = later {
                         let (_, f) = &script[i + off];
                         match proto {
@@ -162,7 +197,10 @@ pub fn spawn_fake(proto: Proto, entries: Vec<Value>) -> (ReadHalf<DuplexStream>,
                             Proto::Claude => {
                                 if got["type"] == "control_request" {
                                     last_ctrl = Some(got["request_id"].clone());
-                                    ids.insert(f["request_id"].to_string(), got["request_id"].clone());
+                                    ids.insert(
+                                        f["request_id"].to_string(),
+                                        got["request_id"].clone(),
+                                    );
                                 }
                             }
                         }
@@ -175,7 +213,9 @@ pub fn spawn_fake(proto: Proto, entries: Vec<Value>) -> (ReadHalf<DuplexStream>,
                             write_frame!(json!({ "id": got["id"], "result": {} }));
                         }
                         Proto::Claude if got["type"] == "control_request" => {
-                            write_frame!(json!({ "type": "control_response", "response": { "subtype": "success", "request_id": got["request_id"], "response": {} } }));
+                            write_frame!(
+                                json!({ "type": "control_response", "response": { "subtype": "success", "request_id": got["request_id"], "response": {} } })
+                            );
                         }
                         _ => {}
                     }
@@ -183,14 +223,20 @@ pub fn spawn_fake(proto: Proto, entries: Vec<Value>) -> (ReadHalf<DuplexStream>,
             }
         }
         // Script done: keep answering until the client hangs up.
-        while let Ok(Ok(Some(line))) = tokio::time::timeout(Duration::from_secs(30), lines.next_line()).await {
-            let Ok(got) = serde_json::from_str::<Value>(&line) else { continue };
+        while let Ok(Ok(Some(line))) =
+            tokio::time::timeout(Duration::from_secs(30), lines.next_line()).await
+        {
+            let Ok(got) = serde_json::from_str::<Value>(&line) else {
+                continue;
+            };
             log.push(got.clone());
             if proto == Proto::Codex && got.get("method").is_some() && got.get("id").is_some() {
                 write_frame!(json!({ "id": got["id"], "result": {} }));
             }
             if proto == Proto::Claude && got["type"] == "control_request" {
-                write_frame!(json!({ "type": "control_response", "response": { "subtype": "success", "request_id": got["request_id"], "response": {} } }));
+                write_frame!(
+                    json!({ "type": "control_response", "response": { "subtype": "success", "request_id": got["request_id"], "response": {} } })
+                );
             }
         }
         Fake { client_frames: log }
@@ -203,19 +249,34 @@ pub fn config(model: &str, instance: &str, mode: RuntimeMode) -> SessionConfig {
         thread_id: "thread-1".into(),
         cwd: "/tmp".into(),
         resume_native_thread_id: None,
-        model_selection: ModelSelection { instance_id: instance.into(), model: model.into(), options: vec![] },
+        model_selection: ModelSelection {
+            instance_id: instance.into(),
+            model: model.into(),
+            options: vec![],
+        },
         runtime_mode: mode,
         binary_path: None,
         env: HashMap::new(),
     }
 }
 
-pub fn turn(run_id: &str, text: &str, model: &str, instance: &str, mode: RuntimeMode, interaction: InteractionMode) -> TurnRequest {
+pub fn turn(
+    run_id: &str,
+    text: &str,
+    model: &str,
+    instance: &str,
+    mode: RuntimeMode,
+    interaction: InteractionMode,
+) -> TurnRequest {
     TurnRequest {
         run_id: run_id.into(),
         text: text.into(),
         attachments: vec![],
-        model_selection: ModelSelection { instance_id: instance.into(), model: model.into(), options: vec![] },
+        model_selection: ModelSelection {
+            instance_id: instance.into(),
+            model: model.into(),
+            options: vec![],
+        },
         runtime_mode: mode,
         interaction_mode: interaction,
         cwd: "/tmp".into(),
@@ -240,6 +301,15 @@ pub async fn drive(
             ProviderEvent::RequestOpened(r) => {
                 if let Some(resp) = answer(r) {
                     session.respond(resp).await.unwrap();
+                    // What the engine does on respond (spec/07 §2.6): the item completes.
+                    let answered = out.iter().rev().find_map(|e| match e {
+                        ProviderEvent::ItemUpserted(i) if i.id == r.turn_item_id => Some(i.clone()),
+                        _ => None,
+                    });
+                    if let Some(mut item) = answered {
+                        item.status = ItemStatus::Completed;
+                        out.push(ProviderEvent::ItemUpserted(item));
+                    }
                 }
             }
             ProviderEvent::TurnStarted { run_id, .. } => match on_started() {
@@ -259,7 +329,12 @@ pub enum Action {
 }
 
 pub fn respond_with(r: &RuntimeRequest, decision: ApprovalDecision) -> RequestResponse {
-    RequestResponse { request: r.clone(), decision: Some(decision), feedback: None, answers: None }
+    RequestResponse {
+        request: r.clone(),
+        decision: Some(decision),
+        feedback: None,
+        answers: None,
+    }
 }
 
 /// Latest snapshot of each item, in ordinal order.
@@ -281,7 +356,12 @@ pub fn terminal(events: &[ProviderEvent]) -> (TerminalStatus, Option<ProviderFai
     events
         .iter()
         .find_map(|e| match e {
-            ProviderEvent::TurnTerminal { status, failure, broken, .. } => Some((*status, failure.clone(), *broken)),
+            ProviderEvent::TurnTerminal {
+                status,
+                failure,
+                broken,
+                ..
+            } => Some((*status, failure.clone(), *broken)),
             _ => None,
         })
         .expect("terminal")
@@ -301,7 +381,10 @@ pub fn assistant_texts(items: &[TurnItem]) -> Vec<String> {
 pub fn assert_settled(items: &[TurnItem]) {
     for i in items {
         assert!(!i.status.is_open(), "item left open: {i:#?}");
-        if let TurnItemBody::AssistantMessage { streaming, .. } | TurnItemBody::Reasoning { streaming, .. } | TurnItemBody::ProposedPlan { streaming, .. } = &i.body {
+        if let TurnItemBody::AssistantMessage { streaming, .. }
+        | TurnItemBody::Reasoning { streaming, .. }
+        | TurnItemBody::ProposedPlan { streaming, .. } = &i.body
+        {
             assert!(!streaming, "item still streaming: {i:#?}");
         }
     }
