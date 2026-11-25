@@ -6540,6 +6540,7 @@ dependencies = [
  "markdown",
  "serde",
  "serde_json",
+ "tempfile",
  "tern-core",
  "tern-engine",
  "tern-git",

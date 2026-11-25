@@ -26,3 +26,6 @@ serde.workspace = true
 markdown = "=1.0.0"
 image = { version = "0.25", default-features = false, features = ["png"] }
 ignore = "0.4"
+
+[dev-dependencies]
+tempfile.workspace = true

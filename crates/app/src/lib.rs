@@ -11,6 +11,7 @@
 //! - `keymap`: T3's commands and keybindings (spec 02 §5); register handlers here.
 //! - `views`: the content views other work fills in.
 //! - `markdown`: markdown → GPUI (chat replies, plans, descriptions).
+//! - `syntax`: tree-sitter highlighting with T3's Pierre palettes.
 
 pub mod app_state;
 pub mod assets;
@@ -20,6 +21,7 @@ pub mod keymap;
 pub mod markdown;
 pub mod shell;
 pub mod store;
+pub mod syntax;
 pub mod theme;
 pub mod tokens;
 pub mod ui;

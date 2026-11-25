@@ -21,6 +21,7 @@ pub mod composer;
 pub mod details;
 pub mod diff_panel;
 pub mod draft;
+pub mod right_panel;
 pub mod settings;
 pub mod sidebar;
 pub mod terminal;

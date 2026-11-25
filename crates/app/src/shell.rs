@@ -48,6 +48,7 @@ pub fn bind_keys(cx: &mut App) {
     cx.bind_keys([KeyBinding::new("escape", Dismiss, Some("Workspace"))]);
     crate::keymap::init(cx);
     crate::views::terminal::bind_keys(cx);
+    crate::views::right_panel::init(cx);
 }
 
 /// Whether Tern draws its own window controls (client-side decorations).
