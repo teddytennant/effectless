@@ -108,7 +108,7 @@ fn branch_scope_diffs_against_merge_base_with_default_branch() {
     r.write("README.md", "hello\nedited\n");
     r.write("wip.txt", "w\n");
 
-    let files = scope_diff(&r.path, &DiffScope::Branch, &no_refs).unwrap();
+    let files = scope_diff(&r.path, &DiffScope::Branch { base_ref: None }, &no_refs).unwrap();
     // Committed + uncommitted + untracked, but not main's later commit.
     assert_eq!(
         paths(&files),
@@ -120,7 +120,7 @@ fn branch_scope_diffs_against_merge_base_with_default_branch() {
     );
     let (source, _) = scope_files(
         &r.path,
-        &DiffScope::Branch,
+        &DiffScope::Branch { base_ref: None },
         &no_refs,
         &DiffOptions::default(),
     )
@@ -135,7 +135,7 @@ fn branch_scope_diffs_against_merge_base_with_default_branch() {
     // Explicit base.
     let p = scope_patch(
         &r.path,
-        &DiffScope::Branch,
+        &DiffScope::Branch { base_ref: None },
         &no_refs,
         &DiffOptions {
             base_ref: Some("main".into()),
@@ -152,7 +152,7 @@ fn branch_scope_on_default_branch_uses_its_upstream() {
     r.add_origin();
     // On main with no remote ahead: only uncommitted work.
     r.write("README.md", "hello\nlocal\n");
-    let files = scope_diff(&r.path, &DiffScope::Branch, &no_refs).unwrap();
+    let files = scope_diff(&r.path, &DiffScope::Branch { base_ref: None }, &no_refs).unwrap();
     assert_eq!(
         paths(&files),
         vec![("README.md".into(), DiffFile::Modified)]
@@ -160,7 +160,7 @@ fn branch_scope_on_default_branch_uses_its_upstream() {
     // An unpushed commit on main shows up against origin/main.
     r.write("unpushed.txt", "u\n");
     r.commit("unpushed");
-    let files = scope_diff(&r.path, &DiffScope::Branch, &no_refs).unwrap();
+    let files = scope_diff(&r.path, &DiffScope::Branch { base_ref: None }, &no_refs).unwrap();
     assert_eq!(
         paths(&files),
         vec![
@@ -175,7 +175,7 @@ fn branch_scope_without_any_base_is_uncommitted() {
     let r = repo();
     r.git(&["branch", "-m", "trunk"]);
     r.write("README.md", "changed\n");
-    let files = scope_diff(&r.path, &DiffScope::Branch, &no_refs).unwrap();
+    let files = scope_diff(&r.path, &DiffScope::Branch { base_ref: None }, &no_refs).unwrap();
     assert_eq!(
         paths(&files),
         vec![("README.md".into(), DiffFile::Modified)]

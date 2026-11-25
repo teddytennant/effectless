@@ -143,7 +143,7 @@ fn resolve(
                 checkpoint: false,
             })
         }
-        DiffScope::Uncommitted | DiffScope::Branch => {
+        DiffScope::Uncommitted | DiffScope::Branch { .. } => {
             let head = head_commit(cwd)?;
             let (title, base_ref, from) = if matches!(scope, DiffScope::Uncommitted) {
                 (
@@ -152,9 +152,13 @@ fn resolve(
                     head.unwrap_or_else(|| EMPTY_TREE.to_string()),
                 )
             } else {
-                let (base, merge_base) = merge_base(cwd, opts.base_ref.as_deref())?;
+                let explicit = match scope {
+                    DiffScope::Branch { base_ref: Some(b) } => Some(b.as_str()),
+                    _ => opts.base_ref.as_deref(),
+                };
+                let (base, merge_base) = merge_base(cwd, explicit)?;
                 let title = match &base {
-                    Some(b) if opts.base_ref.is_some() => format!("Changes vs {b}"),
+                    Some(b) if explicit.is_some() => format!("Changes vs {b}"),
                     _ => "Changes".to_string(),
                 };
                 let from = match merge_base {

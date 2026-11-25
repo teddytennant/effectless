@@ -123,8 +123,9 @@ pub struct OutgoingMessage {
 /// Diff scopes the diff panel can ask for (spec/05 §2).
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum DiffScope {
-    /// Branch changes vs its merge base with the default branch (the default).
-    Branch,
+    /// Branch changes vs the merge base with `base_ref` (None = the default branch).
+    /// This is the panel's default scope.
+    Branch { base_ref: Option<String> },
     Uncommitted,
     Commit(String),
     /// Changes made by one run (checkpoint n-1 -> n).
