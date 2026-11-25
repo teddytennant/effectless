@@ -58,8 +58,7 @@ use std::cell::Cell;
 use std::rc::Rc;
 
 use gpui::{
-    App, Bounds, BoxShadow, Div, Hsla, IntoElement, Pixels, Styled, canvas, div,
-    point, px,
+    App, Bounds, BoxShadow, Div, Hsla, IntoElement, Pixels, Styled, canvas, div, point, px,
 };
 
 use crate::theme::ActiveTheme as _;

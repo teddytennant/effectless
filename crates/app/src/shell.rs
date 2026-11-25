@@ -514,6 +514,15 @@ impl Shell {
             app.right_panel_maximized,
         );
         let has_project = !self.store.read(cx).snapshot().projects.is_empty();
+        let panel_width = app.right_panel.size;
+        let details_toggle = self.panel_toggle(
+            "tb-details",
+            IconName::SquareMenu,
+            details,
+            true,
+            "Toggle thread details (Ctrl+Shift+B)",
+            |s, cx| s.toggle_thread_details(cx),
+        );
         let app_entity = self.app.clone();
         let toggles = h_flex()
             .gap(px(4.))
@@ -546,14 +555,8 @@ impl Shell {
                         ),
                 )
             })
-            .child(self.panel_toggle(
-                "tb-details",
-                IconName::SquareMenu,
-                details,
-                true,
-                "Toggle thread details (Ctrl+Shift+B)",
-                |s, cx| s.toggle_thread_details(cx),
-            ))
+            // With the right panel open, thread details moves to the chat header.
+            .when(!rp_open, |el| el.child(details_toggle))
             .child(self.panel_toggle(
                 "tb-terminal",
                 IconName::PanelBottom,
@@ -570,16 +573,40 @@ impl Shell {
                 "Toggle right panel (Ctrl+Alt+B)",
                 |s, cx| s.toggle_right_panel(cx),
             ));
-        h_flex()
+        let details_in_header = (rp_open && !maximized).then(|| {
+            let details_toggle = self.panel_toggle(
+                "tb-details-header",
+                IconName::SquareMenu,
+                details,
+                true,
+                "Toggle thread details (Ctrl+Shift+B)",
+                |s, cx| s.toggle_thread_details(cx),
+            );
+            h_flex()
+                .absolute()
+                .top_0()
+                .right(panel_width + px(12.))
+                .h(layout::TOPBAR_HEIGHT)
+                .child(details_toggle)
+        });
+        div()
             .absolute()
             .top_0()
-            .right_0()
-            .h(layout::TOPBAR_HEIGHT)
-            .child(toggles)
-            .child(div().w(px(12.)))
-            .when(draws_window_controls(window), |el| {
-                el.child(window_controls(window, cx))
-            })
+            .left_0()
+            .size_full()
+            .children(details_in_header)
+            .child(
+                h_flex()
+                    .absolute()
+                    .top_0()
+                    .right_0()
+                    .h(layout::TOPBAR_HEIGHT)
+                    .child(toggles)
+                    .child(div().w(px(12.)))
+                    .when(draws_window_controls(window), |el| {
+                        el.child(window_controls(window, cx))
+                    }),
+            )
             .into_any_element()
     }
 

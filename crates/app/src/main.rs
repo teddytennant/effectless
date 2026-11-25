@@ -13,16 +13,29 @@ struct Args {
     demo: bool,
     theme: ThemeMode,
     route: Route,
+    layout: Vec<String>,
 }
 
-const USAGE: &str = "usage: tern [--demo] [--theme light|dark|system] [--route ROUTE]
-routes: index, draft:<project-id>, thread:<thread-id>, settings, settings/<page>, gallery";
+const USAGE: &str =
+    "usage: tern [--demo] [--theme light|dark|system] [--route ROUTE] [--layout LIST]
+routes: index, draft:<project-id>, thread:<thread-id>, settings, settings/<page>, gallery
+layout (comma list): right-panel, maximized, terminal, palette, collapsed, no-details";
+
+const LAYOUTS: [&str; 6] = [
+    "right-panel",
+    "maximized",
+    "terminal",
+    "palette",
+    "collapsed",
+    "no-details",
+];
 
 fn parse_args() -> Result<Args, String> {
     let mut args = Args {
         demo: false,
         theme: ThemeMode::System,
         route: Route::Index,
+        layout: Vec::new(),
     };
     let mut it = std::env::args().skip(1);
     while let Some(arg) = it.next() {
@@ -45,6 +58,15 @@ fn parse_args() -> Result<Args, String> {
             "--route" => {
                 let v = value("--route")?;
                 args.route = Route::parse(&v).ok_or_else(|| format!("unknown route {v}"))?;
+            }
+            "--layout" => {
+                let v = value("--layout")?;
+                for part in v.split(',').filter(|p| !p.is_empty()) {
+                    if !LAYOUTS.contains(&part) {
+                        return Err(format!("unknown layout {part}"));
+                    }
+                    args.layout.push(part.to_string());
+                }
             }
             "-h" | "--help" => return Err(String::new()),
             other => return Err(format!("unknown argument {other}")),
@@ -71,7 +93,23 @@ fn main() {
             assets::load_fonts(cx);
             gpui_component::init(cx);
             shell::bind_keys(cx);
-            AppState::install(args.route.clone(), args.theme, cx);
+            let app = AppState::install(args.route.clone(), args.theme, cx);
+            app.update(cx, |s, _| {
+                for part in &args.layout {
+                    match part.as_str() {
+                        "right-panel" => s.right_panel.open = true,
+                        "maximized" => {
+                            s.right_panel.open = true;
+                            s.right_panel_maximized = true;
+                        }
+                        "terminal" => s.drawer.open = true,
+                        "palette" => s.palette_open = true,
+                        "collapsed" => s.sidebar.open = false,
+                        "no-details" => s.thread_details_open = false,
+                        _ => {}
+                    }
+                }
+            });
             store::Store::install(args.demo, cx);
 
             // spec 02 §1.1: 1100 x 780 default, 400 x 360 minimum.

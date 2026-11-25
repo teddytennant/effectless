@@ -14,8 +14,8 @@ use std::rc::Rc;
 use gpui::{
     Animation, AnimationExt as _, AnyElement, App, AppContext as _, Context, ElementId,
     FocusHandle, Focusable, InteractiveElement, IntoElement, KeyDownEvent, MouseButton,
-    ParentElement, Pixels, Render, RenderOnce, SharedString,
-    Styled, Window, div, prelude::FluentBuilder as _, px,
+    ParentElement, Pixels, Render, RenderOnce, SharedString, Styled, Window, div,
+    prelude::FluentBuilder as _, px,
 };
 use gpui_base::{Align, Placement};
 
