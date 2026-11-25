@@ -9,6 +9,7 @@ build = "build.rs"
 [dependencies]
 tern-core.workspace = true
 tern-engine.workspace = true
+tern-terminal.workspace = true
 gpui.workspace = true
 gpui_platform.workspace = true
 gpui-component.workspace = true
