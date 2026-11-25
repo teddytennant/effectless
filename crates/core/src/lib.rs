@@ -3,6 +3,7 @@
 pub mod api;
 pub mod model;
 pub mod provider;
+pub mod settings;
 
 pub use api::*;
 pub use model::*;
