@@ -14,7 +14,7 @@ nix run nixpkgs#sway -- -c "$cfg" >"$rt/sway.log" 2>&1 &
 sway_pid=$!
 for _ in $(seq 50); do ls "$rt"/wayland-* >/dev/null 2>&1 && break; sleep 0.2; done
 export WAYLAND_DISPLAY=$(basename "$(ls "$rt"/wayland-? | head -1)")
-"$root/target/debug/tern" "$@" >"$rt/tern.log" 2>&1 &
+"${CARGO_TARGET_DIR:-$root/target}/debug/tern" "$@" >"$rt/tern.log" 2>&1 &
 tern_pid=$!
 sleep "$secs"
 nix run nixpkgs#grim -- "$out"
