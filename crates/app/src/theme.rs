@@ -19,6 +19,8 @@
 
 pub mod color;
 
+use std::sync::Arc;
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::time::Duration;
 
 use gpui::{
@@ -127,9 +129,19 @@ pub enum TextSize {
     Xl3,
 }
 
+/// Interface font size / 16, as f32 bits. Set by [`Theme::set_typography`]; the text
+/// scale follows it the way T3's rem-based sizes follow the root font size.
+static INTERFACE_SCALE: AtomicU32 = AtomicU32::new(0x3f80_0000);
+
+/// The interface font size as a multiplier of the 16px default.
+pub fn interface_scale() -> f32 {
+    f32::from_bits(INTERFACE_SCALE.load(Ordering::Relaxed))
+}
+
 impl TextSize {
     pub fn size(self) -> Pixels {
-        px(match self {
+        interface_scale()
+            * px(match self {
             Self::Xs5 => 7.,
             Self::Xs4 => 8.,
             Self::Xs3 => 10.,
@@ -145,7 +157,8 @@ impl TextSize {
     }
 
     pub fn line_height(self) -> Pixels {
-        px(match self {
+        interface_scale()
+            * px(match self {
             Self::Xs5 => 7.,
             Self::Xs4 => 8.,
             Self::Xs3 => 14.,
@@ -516,7 +529,8 @@ pub struct Glass {
 }
 
 impl Glass {
-    fn new(p: &Palette, dark: bool) -> Self {
+    fn new(p: &Palette, dark: bool, opacity: u16) -> Self {
+        let opacity = f32::from(opacity.clamp(40, 100)) / 100.;
         Self {
             surface: p.background,
             dropdown: p.popover,
@@ -528,8 +542,8 @@ impl Glass {
                 p.foreground.opacity(0.1)
             },
             dialog_backdrop: p.background.opacity(if dark { 0.64 } else { 0.6 }),
-            surface_translucent: p.background.opacity(0.8),
-            dropdown_translucent: mix_srgb(p.popover, p.popover.opacity(0.8), 0.18),
+            surface_translucent: p.background.opacity(opacity),
+            dropdown_translucent: mix_srgb(p.popover, p.popover.opacity(opacity), 0.18),
         }
     }
 
@@ -826,19 +840,115 @@ pub struct Theme {
     pub glass: Glass,
     pub shadows: Shadows,
     pub extra: Extra,
+    /// `glassOpacity` (40..=100, default 80): how solid the translucent glass fills are.
+    pub glass_opacity: u16,
+    /// Font families and sizes from the Appearance settings.
+    pub typography: Typography,
+    /// A named theme's colors, applied over the stock palette before contrast.
+    pub palette_override: Option<PaletteOverride>,
 }
 
 impl gpui::Global for Theme {}
 
+pub const DEFAULT_GLASS_OPACITY: u16 = 80;
+
+/// Font settings (`fontFamily*`, `fontSize*`, `wordWrap`). Empty families mean the
+/// bundled default.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Typography {
+    pub sans: gpui::SharedString,
+    pub prompt: gpui::SharedString,
+    pub code: gpui::SharedString,
+    pub terminal: gpui::SharedString,
+    pub interface_size: f32,
+    pub prompt_size: f32,
+    pub code_size: f32,
+    pub terminal_size: f32,
+    pub word_wrap: bool,
+}
+
+impl Default for Typography {
+    fn default() -> Self {
+        Self {
+            sans: "".into(),
+            prompt: "".into(),
+            code: "".into(),
+            terminal: "".into(),
+            interface_size: font::INTERFACE_SIZE,
+            prompt_size: font::PROMPT_SIZE,
+            code_size: font::CODE_SIZE,
+            terminal_size: font::TERMINAL_SIZE,
+            word_wrap: true,
+        }
+    }
+}
+
+impl Typography {
+    fn pick(family: &gpui::SharedString, fallback: &'static str) -> gpui::SharedString {
+        if family.is_empty() {
+            fallback.into()
+        } else {
+            family.clone()
+        }
+    }
+
+    pub fn sans_family(&self) -> gpui::SharedString {
+        Self::pick(&self.sans, font::SANS)
+    }
+
+    pub fn prompt_family(&self) -> gpui::SharedString {
+        Self::pick(&self.prompt, font::SANS)
+    }
+
+    pub fn code_family(&self) -> gpui::SharedString {
+        Self::pick(&self.code, font::MONO)
+    }
+
+    pub fn terminal_family(&self) -> gpui::SharedString {
+        Self::pick(&self.terminal, font::MONO)
+    }
+}
+
+/// Rewrites the raw root and sidebar palettes for one appearance (`dark`).
+#[derive(Clone)]
+pub struct PaletteOverride {
+    pub id: gpui::SharedString,
+    pub apply: Arc<dyn Fn(&mut Palette, &mut SidebarPalette, bool) + Send + Sync>,
+}
+
+impl std::fmt::Debug for PaletteOverride {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_tuple("PaletteOverride").field(&self.id).finish()
+    }
+}
+
 impl Theme {
     pub fn new(mode: ThemeMode, system: Appearance, contrast: u16) -> Self {
+        Self::build(
+            mode,
+            system,
+            contrast,
+            DEFAULT_GLASS_OPACITY,
+            Typography::default(),
+            None,
+        )
+    }
+
+    fn build(
+        mode: ThemeMode,
+        system: Appearance,
+        contrast: u16,
+        glass_opacity: u16,
+        typography: Typography,
+        palette_override: Option<PaletteOverride>,
+    ) -> Self {
         let appearance = match mode {
             ThemeMode::System => system,
             ThemeMode::Light => Appearance::Light,
             ThemeMode::Dark => Appearance::Dark,
         };
         let dark = appearance.is_dark();
-        let (raw, raw_sidebar, diff) = if dark {
+        let (mut raw, mut raw_sidebar, diff) = if dark {
             (Palette::dark(), SidebarPalette::dark(), DiffPalette::dark())
         } else {
             (
@@ -847,6 +957,9 @@ impl Theme {
                 DiffPalette::light(),
             )
         };
+        if let Some(o) = &palette_override {
+            (o.apply)(&mut raw, &mut raw_sidebar, dark);
+        }
         let contrast_rules = Contrast::new(contrast, dark);
         let colors = contrast_rules.apply(&raw);
         let sidebar_colors = contrast_rules.apply(&sidebar_scope(&raw, &raw_sidebar));
@@ -856,14 +969,35 @@ impl Theme {
             contrast,
             states: StateColors::new(&colors, dark),
             sidebar_states: StateColors::new(&sidebar_colors, dark),
-            glass: Glass::new(&colors, dark),
+            glass: Glass::new(&colors, dark, glass_opacity),
             shadows: Shadows { dark },
             extra: Extra::new(&colors, dark),
             colors,
             sidebar_colors,
             raw,
             diff,
+            glass_opacity,
+            typography,
+            palette_override,
         }
+    }
+
+    /// The same theme with a different mode, system appearance or contrast.
+    fn rebuilt(&self, mode: ThemeMode, system: Appearance, contrast: u16) -> Self {
+        Self::build(
+            mode,
+            system,
+            contrast,
+            self.glass_opacity,
+            self.typography.clone(),
+            self.palette_override.clone(),
+        )
+    }
+
+    fn replace(next: Theme, cx: &mut App) {
+        cx.set_global(next);
+        sync_component_theme(cx);
+        cx.refresh_windows();
     }
 
     pub fn is_dark(&self) -> bool {
@@ -887,20 +1021,71 @@ impl Theme {
 
     /// Changes the preference. Repaints every window.
     pub fn set_mode(mode: ThemeMode, window: &Window, cx: &mut App) {
-        let contrast = cx.global::<Theme>().contrast;
+        let theme = cx.global::<Theme>();
         let system = Appearance::from_window(window.appearance());
-        cx.set_global(Theme::new(mode, system, contrast));
-        sync_component_theme(cx);
-        cx.refresh_windows();
+        let next = theme.rebuilt(mode, system, theme.contrast);
+        Self::replace(next, cx);
     }
 
     /// Changes the appearance contrast (50..=200).
     pub fn set_contrast(contrast: u16, window: &Window, cx: &mut App) {
-        let mode = cx.global::<Theme>().mode;
+        let theme = cx.global::<Theme>();
         let system = Appearance::from_window(window.appearance());
-        cx.set_global(Theme::new(mode, system, contrast));
-        sync_component_theme(cx);
-        cx.refresh_windows();
+        let next = theme.rebuilt(theme.mode, system, contrast);
+        Self::replace(next, cx);
+    }
+
+    /// Changes the glass opacity (40..=100).
+    pub fn set_glass_opacity(opacity: u16, window: &Window, cx: &mut App) {
+        let theme = cx.global::<Theme>();
+        if theme.glass_opacity == opacity {
+            return;
+        }
+        let system = Appearance::from_window(window.appearance());
+        let mut next = theme.rebuilt(theme.mode, system, theme.contrast);
+        next.glass_opacity = opacity;
+        next.glass = Glass::new(&next.colors, next.is_dark(), opacity);
+        Self::replace(next, cx);
+    }
+
+    /// Changes fonts. The interface size scales the text scale and the window's rem.
+    pub fn set_typography(typography: Typography, window: &mut Window, cx: &mut App) {
+        if cx.global::<Theme>().typography == typography {
+            return;
+        }
+        let scale = (typography.interface_size / font::INTERFACE_SIZE).clamp(0.5, 2.);
+        INTERFACE_SCALE.store(scale.to_bits(), Ordering::Relaxed);
+        window.set_rem_size(px(typography.interface_size));
+        let mut next = cx.global::<Theme>().clone();
+        next.typography = typography;
+        Self::replace(next, cx);
+    }
+
+    /// Paints a named theme over the stock palette (None: the stock theme).
+    pub fn set_palette_override(
+        palette_override: Option<PaletteOverride>,
+        window: &Window,
+        cx: &mut App,
+    ) {
+        let theme = cx.global::<Theme>();
+        let same = match (&theme.palette_override, &palette_override) {
+            (None, None) => true,
+            (Some(a), Some(b)) => a.id == b.id,
+            _ => false,
+        };
+        if same {
+            return;
+        }
+        let system = Appearance::from_window(window.appearance());
+        let next = Self::build(
+            theme.mode,
+            system,
+            theme.contrast,
+            theme.glass_opacity,
+            theme.typography.clone(),
+            palette_override,
+        );
+        Self::replace(next, cx);
     }
 
     /// Call when the window's system appearance changes; only `System` reacts.
@@ -911,10 +1096,8 @@ impl Theme {
         }
         let next = Appearance::from_window(window.appearance());
         if next != theme.appearance {
-            let contrast = theme.contrast;
-            cx.set_global(Theme::new(ThemeMode::System, next, contrast));
-            sync_component_theme(cx);
-            cx.refresh_windows();
+            let rebuilt = theme.rebuilt(ThemeMode::System, next, theme.contrast);
+            Self::replace(rebuilt, cx);
         }
     }
 }
@@ -1062,10 +1245,10 @@ pub fn sync_component_theme(cx: &mut App) {
         CTheme::change(mode, None, cx);
     }
     CTheme::update(cx, |t| {
-        t.font_family = font::SANS.into();
-        t.font_size = px(14.);
-        t.mono_font_family = font::MONO.into();
-        t.mono_font_size = px(font::CODE_SIZE);
+        t.font_family = theme.typography.sans_family();
+        t.font_size = px(14.) * interface_scale();
+        t.mono_font_family = theme.typography.code_family();
+        t.mono_font_size = px(theme.typography.code_size);
         t.radius = radius::LG;
         t.radius_lg = radius::XL2;
         t.shadow = true;
