@@ -63,6 +63,8 @@ fn choice(value: &str, label: &str, is_default: bool) -> ModelOptionChoice {
         value: value.into(),
         label: label.into(),
         is_default,
+        description: None,
+        prompt_injected: false,
     }
 }
 
@@ -81,6 +83,7 @@ fn model(
         description: Some(desc.into()),
         is_default,
         is_custom: false,
+        is_legacy: false,
         options,
     }
 }

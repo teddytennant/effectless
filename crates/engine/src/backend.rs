@@ -100,7 +100,23 @@ impl TitleGenerator for RealTitles {
         context: String,
         cwd: PathBuf,
     ) -> BoxFuture<Result<String>> {
-        Box::pin(async move { tern_providers::textgen::thread_title(&model, &context, &cwd).await })
+        Box::pin(async move {
+            use tern_providers::textgen::{TextGenOptions, ThreadTitleInput, thread_title};
+            let opts = TextGenOptions {
+                model,
+                ..TextGenOptions::default_for(cwd)
+            };
+            let input = ThreadTitleInput {
+                message: context,
+                project_name: None,
+                instructions: None,
+                attachments: Vec::new(),
+                previous_title: None,
+                linked_context: None,
+                fork: None,
+            };
+            thread_title(&opts, &input).await
+        })
     }
 }
 
