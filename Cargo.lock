@@ -6566,9 +6566,13 @@ name = "tern-git"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
  "tempfile",
  "tern-core",
  "tracing",
+ "uuid",
 ]
 
 [[package]]
