@@ -9,6 +9,7 @@
 //!   overlay hosts.
 //! - `app_state`: `AppState` (route, layout); `store`: `Store` (engine data).
 //! - `views`: the content views other work fills in.
+//! - `syntax`: tree-sitter highlighting with T3's Pierre palettes.
 
 pub mod app_state;
 pub mod assets;
@@ -16,6 +17,7 @@ pub mod fixtures;
 pub mod gallery;
 pub mod shell;
 pub mod store;
+pub mod syntax;
 pub mod theme;
 pub mod tokens;
 pub mod ui;

@@ -9,6 +9,7 @@ build = "build.rs"
 [dependencies]
 tern-core.workspace = true
 tern-engine.workspace = true
+tern-git.workspace = true
 gpui.workspace = true
 gpui_platform.workspace = true
 gpui-component.workspace = true
@@ -18,3 +19,6 @@ anyhow.workspace = true
 futures.workspace = true
 chrono.workspace = true
 image = { version = "0.25", default-features = false, features = ["png"] }
+
+[dev-dependencies]
+tempfile.workspace = true

@@ -6536,8 +6536,10 @@ dependencies = [
  "gpui-pre",
  "gpui-pre-platform",
  "image",
+ "tempfile",
  "tern-core",
  "tern-engine",
+ "tern-git",
 ]
 
 [[package]]

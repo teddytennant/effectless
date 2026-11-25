@@ -54,6 +54,7 @@ pub fn bind_keys(cx: &mut App) {
         KeyBinding::new("ctrl-]", GoForward, Some("Workspace")),
         KeyBinding::new("escape", Dismiss, Some("Workspace")),
     ]);
+    crate::views::right_panel::init(cx);
 }
 
 /// Whether Tern draws its own window controls (client-side decorations).

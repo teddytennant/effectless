@@ -110,7 +110,26 @@ fn main() {
                     }
                 }
             });
-            store::Store::install(args.demo, cx);
+            let store = store::Store::install(args.demo, cx);
+            // Demo thread ids change every run: `--route thread:<title prefix>` also works.
+            if let Route::Thread(wanted) = &args.route {
+                let snapshot = store.read(cx).snapshot();
+                let lower = wanted.to_lowercase();
+                let found = snapshot
+                    .threads
+                    .iter()
+                    .find(|t| t.thread.id == *wanted)
+                    .or_else(|| {
+                        snapshot
+                            .threads
+                            .iter()
+                            .find(|t| t.thread.title.to_lowercase().starts_with(&lower))
+                    })
+                    .map(|t| t.thread.id.clone());
+                if let Some(id) = found.filter(|id| id != wanted) {
+                    app.update(cx, |s, cx| s.replace(Route::Thread(id), cx));
+                }
+            }
 
             // spec 02 §1.1: 1100 x 780 default, 400 x 360 minimum.
             let bounds = Bounds::centered(None, size(px(1100.), px(780.)), cx);

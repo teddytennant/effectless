@@ -17,6 +17,7 @@ pub mod chat;
 pub mod command_palette;
 pub mod composer;
 pub mod diff_panel;
+pub mod right_panel;
 pub mod settings;
 pub mod sidebar;
 pub mod terminal_drawer;
