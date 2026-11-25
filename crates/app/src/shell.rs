@@ -41,19 +41,12 @@ actions!(
     ]
 );
 
-/// Default shell key bindings (spec 02 §5.2, Linux).
+/// Shell key bindings. The T3 commands (spec 02 §5.2) run through `crate::keymap`;
+/// only Escape stays a plain GPUI binding.
 pub fn bind_keys(cx: &mut App) {
     use gpui::KeyBinding;
-    cx.bind_keys([
-        KeyBinding::new("ctrl-b", ToggleSidebar, Some("Workspace")),
-        KeyBinding::new("ctrl-j", ToggleTerminal, Some("Workspace")),
-        KeyBinding::new("ctrl-alt-b", ToggleRightPanel, Some("Workspace")),
-        KeyBinding::new("ctrl-shift-b", ToggleThreadDetails, Some("Workspace")),
-        KeyBinding::new("ctrl-k", ToggleCommandPalette, Some("Workspace")),
-        KeyBinding::new("ctrl-[", GoBack, Some("Workspace")),
-        KeyBinding::new("ctrl-]", GoForward, Some("Workspace")),
-        KeyBinding::new("escape", Dismiss, Some("Workspace")),
-    ]);
+    cx.bind_keys([KeyBinding::new("escape", Dismiss, Some("Workspace"))]);
+    crate::keymap::init(cx);
     crate::views::terminal::bind_keys(cx);
 }
 
@@ -823,8 +816,13 @@ impl Render for Shell {
         let overlay_panel = viewport.width < crate::app_state::right_panel::OVERLAY_BELOW;
         let this = cx.entity().downgrade();
 
+        let no_projects = self.store.read(cx).snapshot().projects.is_empty();
         let main: AnyElement = match chat_route {
             Route::Gallery => self.gallery.clone().into_any_element(),
+            // spec 02 §3: `/` with no projects shows NoProjectsHero.
+            Route::Index if no_projects => {
+                crate::views::sidebar::NoProjectsHero::new().into_any_element()
+            }
             _ => {
                 let chat_column = self.render_chat_column(window, cx);
                 h_flex()

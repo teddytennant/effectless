@@ -8,12 +8,14 @@
 //! - `shell`: window chrome, titlebar strip, sidebar container, panel slots,
 //!   overlay hosts.
 //! - `app_state`: `AppState` (route, layout); `store`: `Store` (engine data).
+//! - `keymap`: T3's commands and keybindings (spec 02 §5); register handlers here.
 //! - `views`: the content views other work fills in.
 
 pub mod app_state;
 pub mod assets;
 pub mod fixtures;
 pub mod gallery;
+pub mod keymap;
 pub mod shell;
 pub mod store;
 pub mod theme;

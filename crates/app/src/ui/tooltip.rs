@@ -62,6 +62,7 @@ pub struct Tooltip {
     side: TooltipSide,
     variant: TooltipVariant,
     delay: Duration,
+    align: Align,
 }
 
 impl Tooltip {
@@ -73,6 +74,7 @@ impl Tooltip {
             side: TooltipSide::Top,
             variant: TooltipVariant::Default,
             delay: motion::TOOLTIP_DELAY,
+            align: Align::Center,
         }
     }
 
@@ -107,6 +109,12 @@ impl Tooltip {
 
     pub fn delay(mut self, delay: Duration) -> Self {
         self.delay = delay;
+        self
+    }
+
+    /// Alignment along the side (the sidebar's hover card is start-aligned).
+    pub fn align(mut self, align: Align) -> Self {
+        self.align = align;
         self
     }
 
@@ -248,6 +256,13 @@ impl TooltipLayer {
         }
     }
 
+    /// Shows `tooltip` at `anchor` right away (dev screenshots of hover states).
+    pub fn show_now(tooltip: Tooltip, anchor: Bounds<Pixels>, cx: &mut App) {
+        if let Some(layer) = Self::global(cx) {
+            layer.update(cx, |layer, cx| layer.show(tooltip, anchor, false, cx));
+        }
+    }
+
     /// Hides whatever is showing (route changes, drags).
     pub fn hide_all(&mut self, cx: &mut Context<Self>) {
         self.pending = None;
@@ -284,7 +299,7 @@ impl Render for TooltipLayer {
         deferred(
             Positioner::side(shown.anchor)
                 .placement(placement)
-                .align(Align::Center)
+                .align(shown.tooltip.align)
                 .offset(px(4.))
                 .margin(px(5.))
                 .child(popup),
