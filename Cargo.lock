@@ -6548,6 +6548,7 @@ name = "tern-engine"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "async-trait",
  "chrono",
  "dirs 6.0.0",
  "parking_lot",
