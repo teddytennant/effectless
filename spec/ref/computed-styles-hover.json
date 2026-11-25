@@ -1,0 +1,135 @@
+{
+  "note": "computed styles at rest vs under mouse hover; chrome run with a fine pointer + hover",
+  "light": {
+    "sidebar_row_inactive": {
+      "rest": {
+        "background-color": "rgba(0, 0, 0, 0)",
+        "color": "oklab(0.552 0.00439355 -0.015385 / 0.75)",
+        "border-top": "0px solid color(srgb 0.89436 0.894525 0.906214)",
+        "box-shadow": "none",
+        "opacity": "1"
+      },
+      "hover": {
+        "background-color": "oklch(0.992 0 0)",
+        "color": "oklab(0.21 0.00164225 -0.00577088)",
+        "border-top": "0px solid color(srgb 0.89436 0.894525 0.906214)",
+        "box-shadow": "none",
+        "opacity": "1"
+      }
+    },
+    "model_picker_button": {
+      "rest": {
+        "background-color": "rgba(0, 0, 0, 0)",
+        "color": "oklab(0.21 0.00164225 -0.00577088 / 0.8)",
+        "border-top": "1px solid rgba(0, 0, 0, 0)",
+        "box-shadow": "none",
+        "opacity": "1"
+      },
+      "hover": {
+        "background-color": "oklch(0.967 0.001 286.375)",
+        "color": "oklab(0.21 0.00164225 -0.00577088)",
+        "border-top": "1px solid rgba(0, 0, 0, 0)",
+        "box-shadow": "none",
+        "opacity": "1"
+      }
+    },
+    "titlebar_icon_button": {
+      "rest": {
+        "background-color": "rgba(0, 0, 0, 0)",
+        "color": "oklab(0.21 0.00164225 -0.00577088)",
+        "border-top": "1px solid rgba(0, 0, 0, 0)",
+        "box-shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px",
+        "opacity": "1"
+      },
+      "hover": {
+        "background-color": "oklch(0.967 0.001 286.375)",
+        "color": "oklab(0.21 0.00164225 -0.00577088)",
+        "border-top": "1px solid rgba(0, 0, 0, 0)",
+        "box-shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px",
+        "opacity": "1"
+      }
+    },
+    "submit_button": {
+      "rest": {
+        "background-color": "oklab(0.21 0.00164225 -0.00577088 / 0.12)",
+        "color": "oklab(0.552 0.00439355 -0.015385)",
+        "border-top": "0px solid color(srgb 0.89436 0.894525 0.906214)",
+        "box-shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px",
+        "opacity": "1"
+      },
+      "hover": {
+        "background-color": "oklab(0.21 0.00164225 -0.00577088 / 0.12)",
+        "color": "oklab(0.552 0.00439355 -0.015385)",
+        "border-top": "0px solid color(srgb 0.89436 0.894525 0.906214)",
+        "box-shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px",
+        "opacity": "1"
+      }
+    }
+  },
+  "dark": {
+    "sidebar_row_inactive": {
+      "rest": {
+        "background-color": "rgba(0, 0, 0, 0)",
+        "color": "oklab(0.715469 0.0000326335 0.0000143051 / 0.75)",
+        "border-top": "0px solid color(srgb 1 1 1 / 0.0784314)",
+        "box-shadow": "none",
+        "opacity": "1"
+      },
+      "hover": {
+        "background-color": "color(srgb 0.945098 0.952941 0.968627 / 0.08)",
+        "color": "oklab(0.963762 -0.000504732 -0.00571203)",
+        "border-top": "0px solid color(srgb 1 1 1 / 0.0784314)",
+        "box-shadow": "none",
+        "opacity": "1"
+      }
+    },
+    "model_picker_button": {
+      "rest": {
+        "background-color": "rgba(0, 0, 0, 0)",
+        "color": "oklab(0.97 0 0 / 0.8)",
+        "border-top": "1px solid rgba(0, 0, 0, 0)",
+        "box-shadow": "none",
+        "opacity": "1"
+      },
+      "hover": {
+        "background-color": "oklab(0.999994 0.0000455678 0.0000200868 / 0.04)",
+        "color": "oklab(0.97 0 0)",
+        "border-top": "1px solid rgba(0, 0, 0, 0)",
+        "box-shadow": "none",
+        "opacity": "1"
+      }
+    },
+    "titlebar_icon_button": {
+      "rest": {
+        "background-color": "rgba(0, 0, 0, 0)",
+        "color": "oklab(0.97 0 0)",
+        "border-top": "1px solid rgba(0, 0, 0, 0)",
+        "box-shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px",
+        "opacity": "1"
+      },
+      "hover": {
+        "background-color": "oklab(0.999994 0.0000455678 0.0000200868 / 0.04)",
+        "color": "oklab(0.97 0 0)",
+        "border-top": "1px solid rgba(0, 0, 0, 0)",
+        "box-shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px",
+        "opacity": "1"
+      }
+    },
+    "submit_button": {
+      "rest": {
+        "background-color": "oklab(0.97 0 0 / 0.12)",
+        "color": "oklab(0.708 0 0)",
+        "border-top": "0px solid color(srgb 1 1 1 / 0.08)",
+        "box-shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px",
+        "opacity": "1"
+      },
+      "hover": {
+        "background-color": "oklab(0.97 0 0 / 0.12)",
+        "color": "oklab(0.708 0 0)",
+        "border-top": "0px solid color(srgb 1 1 1 / 0.08)",
+        "box-shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px",
+        "opacity": "1"
+      }
+    }
+  }
+}
