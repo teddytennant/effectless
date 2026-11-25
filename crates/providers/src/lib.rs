@@ -1,5 +1,16 @@
 //! Agent drivers. Each adapter runs a CLI as a child process and turns its protocol
 //! into `tern_core::ProviderEvent`s. spec/07 §3 (Codex), §4 (Claude), §9 (text generation).
+//!
+//! Contract notes for the engine:
+//! - `TurnItem.ordinal` on emitted items is the item's position inside its turn
+//!   (1, 2, 3, ...). The engine adds `run.ordinal * 100` (RunExecutionService.ts:962);
+//!   the user message the engine writes itself takes position 0.
+//! - Every turn that `start_turn` accepted ends with exactly one `TurnTerminal`, including
+//!   when the process dies, a pipe breaks or a line can't be parsed (`broken: true`).
+//!   Open tool items are settled (`interrupted`) and pending requests closed
+//!   (`cancelled`) before it.
+//! - Text deltas are coalesced in the adapter (50 ms, plans 400 ms) and arrive as full
+//!   snapshots in `ItemUpserted`, idempotent by `TurnItem.id`.
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -11,6 +22,13 @@ use tokio::sync::mpsc;
 pub mod claude;
 pub mod codex;
 pub mod textgen;
+
+mod discovery;
+mod items;
+mod process;
+mod util;
+
+pub use discovery::{expand_tilde, find_binary};
 
 /// What a session needs to start a turn.
 #[derive(Clone, Debug)]
@@ -51,7 +69,9 @@ pub struct RequestResponse {
 #[async_trait]
 pub trait ProviderSessionHandle: Send + Sync {
     fn capabilities(&self) -> Capabilities;
-    /// Starts a turn. Events for it arrive on the session's event channel.
+    /// Starts a turn. Returns once the provider accepted it; events for it arrive on the
+    /// session's event channel. An `Err` means the turn never started and no
+    /// `TurnTerminal` will follow.
     async fn start_turn(&self, turn: TurnRequest) -> anyhow::Result<()>;
     async fn steer(&self, run_id: &str, text: String) -> anyhow::Result<()>;
     async fn interrupt(&self, run_id: &str) -> anyhow::Result<()>;
@@ -77,5 +97,8 @@ pub trait ProviderAdapter: Send + Sync {
 }
 
 pub fn builtin_adapters() -> Vec<Box<dyn ProviderAdapter>> {
-    vec![Box::new(codex::CodexAdapter::new()), Box::new(claude::ClaudeAdapter::new())]
+    vec![
+        Box::new(codex::CodexAdapter::new()),
+        Box::new(claude::ClaudeAdapter::new()),
+    ]
 }
