@@ -69,6 +69,12 @@ pub struct ModelOptionChoice {
     pub label: String,
     #[serde(default)]
     pub is_default: bool,
+    /// Tooltip text, e.g. Codex effort descriptions or Claude's Ultracode note.
+    #[serde(default)]
+    pub description: Option<String>,
+    /// Sent as a prompt prefix rather than an option (Claude `ultrathink`).
+    #[serde(default)]
+    pub prompt_injected: bool,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -98,6 +104,9 @@ pub struct ProviderModel {
     pub is_default: bool,
     #[serde(default)]
     pub is_custom: bool,
+    /// Shown behind "Show more" in the picker (manifest status `legacy`).
+    #[serde(default)]
+    pub is_legacy: bool,
     #[serde(default)]
     pub options: Vec<ModelOptionDescriptor>,
 }
