@@ -110,7 +110,22 @@ fn main() {
                     }
                 }
             });
-            store::Store::install(args.demo, cx);
+            let store = store::Store::install(args.demo, cx);
+            // `--route thread:<words>` also matches a thread title (demo ids are random).
+            if let Route::Thread(wanted) = app.read(cx).chat_route().clone() {
+                let snapshot = store.read(cx).snapshot();
+                if snapshot.thread(&wanted).is_none() {
+                    let needle = wanted.to_lowercase().replace('-', " ");
+                    if let Some(t) = snapshot
+                        .threads
+                        .iter()
+                        .find(|t| t.thread.title.to_lowercase().contains(&needle))
+                    {
+                        let route = Route::Thread(t.thread.id.clone());
+                        app.update(cx, |s, cx| s.replace(route, cx));
+                    }
+                }
+            }
 
             // spec 02 §1.1: 1100 x 780 default, 400 x 360 minimum.
             let bounds = Bounds::centered(None, size(px(1100.), px(780.)), cx);

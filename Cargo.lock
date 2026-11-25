@@ -6535,9 +6535,13 @@ dependencies = [
  "gpui-kit-assets",
  "gpui-pre",
  "gpui-pre-platform",
+ "ignore",
  "image",
+ "serde",
+ "serde_json",
  "tern-core",
  "tern-engine",
+ "tern-git",
 ]
 
 [[package]]
