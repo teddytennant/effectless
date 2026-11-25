@@ -72,7 +72,8 @@ pub(crate) enum ActorMsg {
     CaptureMissing {
         run_id: String,
     },
-    Shutdown,
+    /// Kill the session, flush, then ack so the engine can drop the runtime.
+    Shutdown(std::sync::mpsc::Sender<()>),
 }
 
 pub(crate) struct LiveSession {
@@ -219,11 +220,12 @@ impl ThreadActor {
                 None => rx.recv().await,
             };
             let Some(msg) = msg else { break };
-            if matches!(msg, ActorMsg::Shutdown) {
+            if let ActorMsg::Shutdown(ack) = msg {
                 if let Some(s) = self.session.take() {
                     s.handle.kill();
                 }
                 self.commit();
+                let _ = ack.send(());
                 break;
             }
             let streaming = self.handle(msg);
@@ -530,7 +532,7 @@ impl ThreadActor {
                     self.start_capture(&run_id);
                 }
             }
-            ActorMsg::Shutdown => {}
+            ActorMsg::Shutdown(_) => {}
         }
         false
     }

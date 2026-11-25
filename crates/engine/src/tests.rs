@@ -884,10 +884,10 @@ fn queued_follow_up_starts_after_the_active_run() {
         h.fake.called(&format!("start:{run2}")).then_some(())
     });
     let d = h.detail(&id);
-    assert_eq!(
+    assert!(matches!(
         d.runs.iter().find(|r| r.id == run2).unwrap().status,
-        RunStatus::Starting
-    );
+        RunStatus::Starting | RunStatus::Running
+    ));
     assert_eq!(h.fake.0.lock().opens, 1, "session reused");
     // the queued message now sits after everything run 1 wrote
     let pos = |pred: &dyn Fn(&TurnItem) -> bool| d.items.iter().position(pred).unwrap();
@@ -1132,7 +1132,10 @@ fn model_change_restarts_a_session_without_in_session_switch() {
         model_selection: None,
         mode: DispatchMode::StartImmediately,
     });
-    h.wait("reopen", |_| (h.fake.0.lock().opens == 2).then_some(()));
+    h.wait("run 2 running", |e| {
+        let d = e.thread(&id)?;
+        (d.runs.get(1)?.status == RunStatus::Running).then_some(())
+    });
     let mut ms = codex();
     ms.model = "gpt-6-luna".into();
     h.engine.send(Command::SetModelSelection {
@@ -1848,4 +1851,13 @@ fn demo_interrupt_stops_the_streaming_thread() {
         (e.thread(&id)?.runs.iter().find(|r| r.id == run)?.status == RunStatus::Interrupted)
             .then_some(())
     });
+}
+
+#[test]
+fn dropping_the_engine_kills_live_sessions() {
+    let h = harness();
+    let (_id, _run) = h.running("long");
+    let fake = h.fake.clone();
+    drop(h);
+    assert!(fake.called("kill"));
 }

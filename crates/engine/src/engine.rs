@@ -469,10 +469,23 @@ impl Inner {
         });
     }
 
+    /// Ask every actor to kill its provider session and flush, wait up to a second for
+    /// them, then drop the runtime.
     pub fn shutdown(&self) {
         let actors: Vec<_> = self.actors.lock().drain().map(|(_, tx)| tx).collect();
+        let (ack_tx, ack_rx) = std::sync::mpsc::channel();
+        let mut expected = 0;
         for tx in actors {
-            let _ = tx.send(ActorMsg::Shutdown);
+            if tx.send(ActorMsg::Shutdown(ack_tx.clone())).is_ok() {
+                expected += 1;
+            }
+        }
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(1);
+        for _ in 0..expected {
+            let left = deadline.saturating_duration_since(std::time::Instant::now());
+            if ack_rx.recv_timeout(left).is_err() {
+                break;
+            }
         }
         if let Some(rt) = self.rt.lock().take() {
             rt.shutdown_background();
