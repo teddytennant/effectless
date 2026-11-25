@@ -1,0 +1,48 @@
+[workspace]
+resolver = "2"
+members = ["crates/*"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+publish = false
+
+[workspace.dependencies]
+tern-core = { path = "crates/core" }
+tern-store = { path = "crates/store" }
+tern-providers = { path = "crates/providers" }
+tern-git = { path = "crates/git" }
+tern-terminal = { path = "crates/terminal" }
+tern-engine = { path = "crates/engine" }
+
+gpui = { package = "gpui-pre", version = "=0.3.14" }
+gpui_platform = { package = "gpui-pre-platform", version = "=0.3.14", features = ["font-kit", "wayland", "x11", "runtime_shaders"] }
+gpui-component = { version = "=0.11.0", features = ["tree-sitter-languages"] }
+anyhow = "1"
+thiserror = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+futures = "0.3"
+uuid = { version = "1", features = ["v4", "v7", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+rusqlite = { version = "0.37", features = ["bundled"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+portable-pty = "0.8"
+alacritty_terminal = "0.26"
+similar = "2"
+dirs = "6"
+parking_lot = "0.12"
+tempfile = "3"
+
+[profile.dev]
+opt-level = 0
+
+[profile.dev.package."*"]
+opt-level = 2
+
+[profile.release]
+lto = "thin"
+strip = "symbols"
