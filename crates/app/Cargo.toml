@@ -23,5 +23,6 @@ anyhow.workspace = true
 futures.workspace = true
 chrono.workspace = true
 serde.workspace = true
+markdown = "=1.0.0"
 image = { version = "0.25", default-features = false, features = ["png"] }
 ignore = "0.4"

@@ -10,12 +10,14 @@
 //! - `app_state`: `AppState` (route, layout); `store`: `Store` (engine data).
 //! - `keymap`: T3's commands and keybindings (spec 02 §5); register handlers here.
 //! - `views`: the content views other work fills in.
+//! - `markdown`: markdown → GPUI (chat replies, plans, descriptions).
 
 pub mod app_state;
 pub mod assets;
 pub mod fixtures;
 pub mod gallery;
 pub mod keymap;
+pub mod markdown;
 pub mod shell;
 pub mod store;
 pub mod theme;

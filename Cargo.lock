@@ -6537,6 +6537,7 @@ dependencies = [
  "gpui-pre-platform",
  "ignore",
  "image",
+ "markdown",
  "serde",
  "serde_json",
  "tern-core",
