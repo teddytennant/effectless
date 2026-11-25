@@ -109,7 +109,9 @@ impl ItemTracker {
 
     /// Edits without emitting; the change goes out on the next `flush`.
     pub fn update_quiet(&mut self, key: &str, slow: bool, f: impl FnOnce(&mut TurnItem)) -> bool {
-        let Some(item) = self.items.get_mut(key) else { return false };
+        let Some(item) = self.items.get_mut(key) else {
+            return false;
+        };
         f(item);
         item.updated_at = now();
         if slow {
@@ -125,7 +127,10 @@ impl ItemTracker {
         if include_slow {
             keys.extend(self.dirty_slow.drain());
         }
-        let mut out: Vec<TurnItem> = keys.iter().filter_map(|k| self.items.get(k).cloned()).collect();
+        let mut out: Vec<TurnItem> = keys
+            .iter()
+            .filter_map(|k| self.items.get(k).cloned())
+            .collect();
         out.sort_by_key(|i| i.ordinal);
         out
     }
@@ -136,7 +141,9 @@ impl ItemTracker {
         let mut out = Vec::new();
         let now = now();
         for key in &self.order {
-            let Some(item) = self.items.get_mut(key) else { continue };
+            let Some(item) = self.items.get_mut(key) else {
+                continue;
+            };
             let mut changed = self.dirty.remove(key) | self.dirty_slow.remove(key);
             match &mut item.body {
                 TurnItemBody::AssistantMessage { streaming, .. }
@@ -205,7 +212,8 @@ pub(crate) fn runtime_request(
 /// Stamps the request id into an approval/question body.
 pub(crate) fn with_request_id(mut body: TurnItemBody, id: &str) -> TurnItemBody {
     match &mut body {
-        TurnItemBody::ApprovalRequest { request_id, .. } | TurnItemBody::UserInputRequest { request_id, .. } => {
+        TurnItemBody::ApprovalRequest { request_id, .. }
+        | TurnItemBody::UserInputRequest { request_id, .. } => {
             *request_id = id.to_string();
         }
         _ => {}
@@ -224,7 +232,12 @@ mod tests {
     use super::*;
 
     fn text(t: &str) -> TurnItemBody {
-        TurnItemBody::AssistantMessage { message_id: "m".into(), text: t.into(), streaming: true, phase: None }
+        TurnItemBody::AssistantMessage {
+            message_id: "m".into(),
+            text: t.into(),
+            streaming: true,
+            phase: None,
+        }
     }
 
     #[test]
@@ -250,7 +263,9 @@ mod tests {
         }
         let out = t.take_dirty(false);
         assert_eq!(out.len(), 1);
-        assert!(matches!(&out[0].body, TurnItemBody::AssistantMessage { text, .. } if text == "abc"));
+        assert!(
+            matches!(&out[0].body, TurnItemBody::AssistantMessage { text, .. } if text == "abc")
+        );
         assert!(t.take_dirty(true).is_empty());
     }
 
@@ -261,14 +276,25 @@ mod tests {
         t.upsert(
             "cmd",
             None,
-            TurnItemBody::CommandExecution { input: "ls".into(), output: None, exit_code: None, output_indicates_failure: None },
+            TurnItemBody::CommandExecution {
+                input: "ls".into(),
+                output: None,
+                exit_code: None,
+                output_indicates_failure: None,
+            },
             ItemStatus::Running,
             None,
         );
         let out = t.settle_open(ItemStatus::Interrupted);
         assert_eq!(out.len(), 2);
         assert_eq!(out[0].status, ItemStatus::Completed);
-        assert!(matches!(out[0].body, TurnItemBody::AssistantMessage { streaming: false, .. }));
+        assert!(matches!(
+            out[0].body,
+            TurnItemBody::AssistantMessage {
+                streaming: false,
+                ..
+            }
+        ));
         assert_eq!(out[1].status, ItemStatus::Interrupted);
         assert!(t.settle_open(ItemStatus::Interrupted).is_empty());
     }

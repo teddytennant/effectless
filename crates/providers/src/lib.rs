@@ -97,5 +97,8 @@ pub trait ProviderAdapter: Send + Sync {
 }
 
 pub fn builtin_adapters() -> Vec<Box<dyn ProviderAdapter>> {
-    vec![Box::new(codex::CodexAdapter::new()), Box::new(claude::ClaudeAdapter::new())]
+    vec![
+        Box::new(codex::CodexAdapter::new()),
+        Box::new(claude::ClaudeAdapter::new()),
+    ]
 }

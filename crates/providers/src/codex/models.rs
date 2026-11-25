@@ -62,10 +62,12 @@ pub fn format_model_name(name: &str) -> String {
 /// Strips `GPT-`/`GPT ` when words other than version numbers remain (spec/04 §2).
 pub fn short_name(name: &str) -> String {
     for prefix in ["GPT-", "GPT "] {
-        if let Some(rest) = name.strip_prefix(prefix) {
-            if rest.split([' ', '-']).any(|w| w.chars().any(|c| c.is_alphabetic())) {
-                return rest.to_string();
-            }
+        if let Some(rest) = name.strip_prefix(prefix)
+            && rest
+                .split([' ', '-'])
+                .any(|w| w.chars().any(|c| c.is_alphabetic()))
+        {
+            return rest.to_string();
         }
     }
     name.to_string()
@@ -94,7 +96,9 @@ pub fn map_model(m: &Value) -> Option<ProviderModel> {
                         value: id.to_string(),
                         label: effort_label(id),
                         is_default: default_effort.as_deref() == Some(id),
-                        description: str_of(e, "description").filter(|d| !d.is_empty()).map(str::to_string),
+                        description: str_of(e, "description")
+                            .filter(|d| !d.is_empty())
+                            .map(str::to_string),
                         prompt_injected: false,
                     })
                 })
@@ -102,7 +106,12 @@ pub fn map_model(m: &Value) -> Option<ProviderModel> {
         })
         .unwrap_or_default();
     if !efforts.is_empty() {
-        options.push(ModelOptionDescriptor { id: "reasoningEffort".into(), label: "Reasoning".into(), choices: efforts, boolean: false });
+        options.push(ModelOptionDescriptor {
+            id: "reasoningEffort".into(),
+            label: "Reasoning".into(),
+            choices: efforts,
+            boolean: false,
+        });
     }
     let mut tiers: Vec<(String, String, String)> = m
         .get("serviceTiers")
@@ -119,14 +128,24 @@ pub fn map_model(m: &Value) -> Option<ProviderModel> {
                 .collect()
         })
         .unwrap_or_default();
-    if tiers.is_empty() {
-        if let Some(extra) = m.get("additionalSpeedTiers").and_then(Value::as_array) {
-            tiers = extra
-                .iter()
-                .filter_map(Value::as_str)
-                .map(|id| (id.to_string(), if id == "fast" { "Fast".into() } else { id.to_string() }, String::new()))
-                .collect();
-        }
+    if tiers.is_empty()
+        && let Some(extra) = m.get("additionalSpeedTiers").and_then(Value::as_array)
+    {
+        tiers = extra
+            .iter()
+            .filter_map(Value::as_str)
+            .map(|id| {
+                (
+                    id.to_string(),
+                    if id == "fast" {
+                        "Fast".into()
+                    } else {
+                        id.to_string()
+                    },
+                    String::new(),
+                )
+            })
+            .collect();
     }
     if !tiers.is_empty() {
         let default_tier = str_of(m, "defaultServiceTier")
@@ -141,7 +160,11 @@ pub fn map_model(m: &Value) -> Option<ProviderModel> {
             prompt_injected: false,
         }];
         for (id, name, desc) in tiers {
-            let desc = if id == "ultrafast" { "Even faster, more expensive".to_string() } else { desc };
+            let desc = if id == "ultrafast" {
+                "Even faster, more expensive".to_string()
+            } else {
+                desc
+            };
             choices.push(ModelOptionChoice {
                 is_default: default_tier == id,
                 value: id,
@@ -150,20 +173,34 @@ pub fn map_model(m: &Value) -> Option<ProviderModel> {
                 prompt_injected: false,
             });
         }
-        options.push(ModelOptionDescriptor { id: "serviceTier".into(), label: "Service Tier".into(), choices, boolean: false });
+        options.push(ModelOptionDescriptor {
+            id: "serviceTier".into(),
+            label: "Service Tier".into(),
+            choices,
+            boolean: false,
+        });
     }
     let cyber: Vec<String> = m
         .get("availableAccessPrograms")
         .and_then(|p| p.get("cyber"))
         .and_then(Value::as_array)
-        .map(|a| a.iter().filter_map(Value::as_str).map(str::to_string).collect())
+        .map(|a| {
+            a.iter()
+                .filter_map(Value::as_str)
+                .map(str::to_string)
+                .collect()
+        })
         .unwrap_or_default();
     if !cyber.is_empty() {
         let mut programs = cyber.clone();
         if !programs.iter().any(|p| p == "standard") {
             programs.insert(0, "standard".into());
         }
-        let default = if cyber.iter().any(|p| p == "standard") { "standard".to_string() } else { cyber[0].clone() };
+        let default = if cyber.iter().any(|p| p == "standard") {
+            "standard".to_string()
+        } else {
+            cyber[0].clone()
+        };
         let choices = programs
             .into_iter()
             .map(|p| ModelOptionChoice {
@@ -179,7 +216,12 @@ pub fn map_model(m: &Value) -> Option<ProviderModel> {
                 prompt_injected: false,
             })
             .collect();
-        options.push(ModelOptionDescriptor { id: "cyberAccessProgram".into(), label: "Cyber Access".into(), choices, boolean: false });
+        options.push(ModelOptionDescriptor {
+            id: "cyberAccessProgram".into(),
+            label: "Cyber Access".into(),
+            choices,
+            boolean: false,
+        });
     }
     Some(ProviderModel {
         short_name: Some(short_name(&name)),
@@ -202,14 +244,21 @@ const PREFERRED_DEFAULTS: &[&str] = &[DEFAULT_MODEL, "gpt-5.6-sol", "gpt-5.6-ter
 pub fn map_models(pages: &[Value]) -> Vec<ProviderModel> {
     let mut out: Vec<ProviderModel> = pages
         .iter()
-        .flat_map(|p| p.get("data").and_then(Value::as_array).cloned().unwrap_or_default())
+        .flat_map(|p| {
+            p.get("data")
+                .and_then(Value::as_array)
+                .cloned()
+                .unwrap_or_default()
+        })
         .filter(|m| !m.get("hidden").and_then(Value::as_bool).unwrap_or(false))
         .filter_map(|m| map_model(&m))
         .collect();
     let family = |slug: &str| slug.strip_prefix("openai.").unwrap_or(slug).to_string();
-    let preferred = PREFERRED_DEFAULTS
-        .iter()
-        .find_map(|p| out.iter().find(|m| family(&m.slug) == *p).map(|m| m.slug.clone()));
+    let preferred = PREFERRED_DEFAULTS.iter().find_map(|p| {
+        out.iter()
+            .find(|m| family(&m.slug) == *p)
+            .map(|m| m.slug.clone())
+    });
     if let Some(slug) = preferred {
         for m in &mut out {
             m.is_default = m.slug == slug;
@@ -253,7 +302,9 @@ pub fn map_account(result: &Value) -> AccountStatus {
                 Some("apiKey") => Some("OpenAI API Key".to_string()),
                 Some("amazonBedrock") => Some("Amazon Bedrock".to_string()),
                 Some("chatgpt") => {
-                    let plan = str_of(a, "planType").and_then(plan_label).map(str::to_string);
+                    let plan = str_of(a, "planType")
+                        .and_then(plan_label)
+                        .map(str::to_string);
                     match (plan, str_of(a, "email")) {
                         (Some(p), Some(e)) => Some(format!("{p} ({e})")),
                         (p, e) => p.or(e.map(str::to_string)),
@@ -261,22 +312,35 @@ pub fn map_account(result: &Value) -> AccountStatus {
                 }
                 _ => None,
             };
-            AccountStatus { auth: ProviderAuthState::SignedIn, label, message: None }
+            AccountStatus {
+                auth: ProviderAuthState::SignedIn,
+                label,
+                message: None,
+            }
         }
-        None if result.get("requiresOpenaiAuth").and_then(Value::as_bool).unwrap_or(false) => AccountStatus {
-            auth: ProviderAuthState::SignedOut,
-            label: None,
-            message: Some(
-                match std::env::var("CODEX_HOME") {
+        None if result
+            .get("requiresOpenaiAuth")
+            .and_then(Value::as_bool)
+            .unwrap_or(false) =>
+        {
+            AccountStatus {
+                auth: ProviderAuthState::SignedOut,
+                label: None,
+                message: Some(match std::env::var("CODEX_HOME") {
                     Ok(home) if !home.is_empty() => format!(
                         "Codex CLI is not authenticated. Run `CODEX_HOME={home} codex login` and try again."
                     ),
-                    _ => "Codex CLI is not authenticated. Run `codex login` and try again.".to_string(),
-                },
-            ),
-        },
+                    _ => "Codex CLI is not authenticated. Run `codex login` and try again."
+                        .to_string(),
+                }),
+            }
+        }
         // A custom model provider that needs no OpenAI login.
-        None => AccountStatus { auth: ProviderAuthState::Unknown, label: None, message: None },
+        None => AccountStatus {
+            auth: ProviderAuthState::Unknown,
+            label: None,
+            message: None,
+        },
     }
 }
 
@@ -294,10 +358,21 @@ mod tests {
 
     #[test]
     fn account_states() {
-        assert_eq!(map_account(&json!({"account": null, "requiresOpenaiAuth": false})).auth, ProviderAuthState::Unknown);
-        assert_eq!(map_account(&json!({"account": null, "requiresOpenaiAuth": true})).auth, ProviderAuthState::SignedOut);
-        let s = map_account(&json!({"account": {"type": "chatgpt", "email": "a@b.c", "planType": "plus"}}));
+        assert_eq!(
+            map_account(&json!({"account": null, "requiresOpenaiAuth": false})).auth,
+            ProviderAuthState::Unknown
+        );
+        assert_eq!(
+            map_account(&json!({"account": null, "requiresOpenaiAuth": true})).auth,
+            ProviderAuthState::SignedOut
+        );
+        let s = map_account(
+            &json!({"account": {"type": "chatgpt", "email": "a@b.c", "planType": "plus"}}),
+        );
         assert_eq!(s.auth, ProviderAuthState::SignedIn);
-        assert_eq!(s.label.as_deref(), Some("ChatGPT Plus Subscription (a@b.c)"));
+        assert_eq!(
+            s.label.as_deref(),
+            Some("ChatGPT Plus Subscription (a@b.c)")
+        );
     }
 }

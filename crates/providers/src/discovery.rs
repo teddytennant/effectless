@@ -6,21 +6,23 @@ use std::time::Duration;
 /// `~` and `~/...` expand to `$HOME` (CA:2068, ClaudeDriver.ts:133).
 pub fn expand_tilde(path: &Path) -> PathBuf {
     let s = path.to_string_lossy();
-    if s == "~" || s.starts_with("~/") {
-        if let Some(home) = std::env::var_os("HOME") {
-            let mut p = PathBuf::from(home);
-            if s.len() > 2 {
-                p.push(&s[2..]);
-            }
-            return p;
+    if (s == "~" || s.starts_with("~/"))
+        && let Some(home) = std::env::var_os("HOME")
+    {
+        let mut p = PathBuf::from(home);
+        if s.len() > 2 {
+            p.push(&s[2..]);
         }
+        return p;
     }
     path.to_path_buf()
 }
 
 fn is_executable(p: &Path) -> bool {
     use std::os::unix::fs::PermissionsExt;
-    std::fs::metadata(p).map(|m| m.is_file() && m.permissions().mode() & 0o111 != 0).unwrap_or(false)
+    std::fs::metadata(p)
+        .map(|m| m.is_file() && m.permissions().mode() & 0o111 != 0)
+        .unwrap_or(false)
 }
 
 /// Resolves the CLI to run. A settings override that names a bare command (no `/`) is
@@ -34,7 +36,9 @@ pub fn find_binary(override_path: Option<&Path>, default_name: &str) -> Option<P
         return is_executable(&wanted).then_some(wanted);
     }
     let path = std::env::var_os("PATH")?;
-    std::env::split_paths(&path).map(|dir| dir.join(&wanted)).find(|p| is_executable(p))
+    std::env::split_paths(&path)
+        .map(|dir| dir.join(&wanted))
+        .find(|p| is_executable(p))
 }
 
 /// First `N.N.N` in the text: `codex-cli 0.160.1`, `2.1.332 (Claude Code)`.
@@ -43,7 +47,10 @@ pub(crate) fn parse_version(text: &str) -> Option<String> {
         .map(|w| w.trim_start_matches('v'))
         .find(|w| {
             let parts: Vec<&str> = w.split('.').collect();
-            parts.len() >= 3 && parts[..3].iter().all(|p| !p.is_empty() && p.chars().all(|c| c.is_ascii_digit()))
+            parts.len() >= 3
+                && parts[..3]
+                    .iter()
+                    .all(|p| !p.is_empty() && p.chars().all(|c| c.is_ascii_digit()))
         })
         .map(str::to_string)
 }
@@ -53,7 +60,10 @@ pub(crate) fn version_at_least(version: &str, min: &str) -> bool {
     let parse = |v: &str| -> Vec<u64> { v.split('.').map(|p| p.parse().unwrap_or(0)).collect() };
     let (a, b) = (parse(version), parse(min));
     for i in 0..a.len().max(b.len()) {
-        let (x, y) = (a.get(i).copied().unwrap_or(0), b.get(i).copied().unwrap_or(0));
+        let (x, y) = (
+            a.get(i).copied().unwrap_or(0),
+            b.get(i).copied().unwrap_or(0),
+        );
         if x != y {
             return x > y;
         }
@@ -69,7 +79,9 @@ pub(crate) enum VersionProbe {
 /// Runs `<bin> --version` with a timeout.
 pub(crate) async fn probe_version(bin: &Path, timeout: Duration) -> VersionProbe {
     let mut cmd = tokio::process::Command::new(bin);
-    cmd.arg("--version").stdin(std::process::Stdio::null()).kill_on_drop(true);
+    cmd.arg("--version")
+        .stdin(std::process::Stdio::null())
+        .kill_on_drop(true);
     match tokio::time::timeout(timeout, cmd.output()).await {
         Err(_) => VersionProbe::Failed("Timed out while running command.".into()),
         Ok(Err(e)) => VersionProbe::Failed(e.to_string()),
@@ -82,7 +94,9 @@ pub(crate) async fn probe_version(bin: &Path, timeout: Duration) -> VersionProbe
             let text = String::from_utf8_lossy(&out.stdout);
             match parse_version(&text) {
                 Some(v) => VersionProbe::Ok(v),
-                None => VersionProbe::Failed(format!("unrecognized version output: {}", text.trim())),
+                None => {
+                    VersionProbe::Failed(format!("unrecognized version output: {}", text.trim()))
+                }
             }
         }
     }
@@ -94,9 +108,18 @@ mod tests {
 
     #[test]
     fn parses_cli_versions() {
-        assert_eq!(parse_version("codex-cli 0.160.1\n").as_deref(), Some("0.160.1"));
-        assert_eq!(parse_version("2.1.332 (Claude Code)").as_deref(), Some("2.1.332"));
-        assert_eq!(parse_version("Tern/0.160.1 (Linux; x86_64)").as_deref(), Some("0.160.1"));
+        assert_eq!(
+            parse_version("codex-cli 0.160.1\n").as_deref(),
+            Some("0.160.1")
+        );
+        assert_eq!(
+            parse_version("2.1.332 (Claude Code)").as_deref(),
+            Some("2.1.332")
+        );
+        assert_eq!(
+            parse_version("Tern/0.160.1 (Linux; x86_64)").as_deref(),
+            Some("0.160.1")
+        );
         assert_eq!(parse_version("nothing"), None);
     }
 

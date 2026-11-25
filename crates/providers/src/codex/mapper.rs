@@ -53,7 +53,10 @@ struct UsageState {
 impl UsageState {
     fn begin(&mut self, turn_id: &str) {
         self.active_turn = Some(turn_id.to_string());
-        self.acc = Breakdown { cache_write: Some(0), ..Default::default() };
+        self.acc = Breakdown {
+            cache_write: Some(0),
+            ..Default::default()
+        };
         self.cache_write_tracked = true;
         self.observed = false;
     }
@@ -100,11 +103,20 @@ impl UsageState {
         self.baseline = Some(total);
     }
 
-    fn finish(&mut self, completed: bool, has_subagents: bool, model: Option<String>) -> TurnTokenUsage {
+    fn finish(
+        &mut self,
+        completed: bool,
+        has_subagents: bool,
+        model: Option<String>,
+    ) -> TurnTokenUsage {
         self.active_turn = None;
         let models = model.map(|m| vec![m]);
         if !self.observed {
-            return TurnTokenUsage::Unavailable(TokenCounts { has_subagents, models, ..Default::default() });
+            return TurnTokenUsage::Unavailable(TokenCounts {
+                has_subagents,
+                models,
+                ..Default::default()
+            });
         }
         let a = self.acc;
         let counts = TokenCounts {
@@ -116,7 +128,11 @@ impl UsageState {
             has_subagents,
             models,
         };
-        if completed { TurnTokenUsage::Complete(counts) } else { TurnTokenUsage::Partial(counts) }
+        if completed {
+            TurnTokenUsage::Complete(counts)
+        } else {
+            TurnTokenUsage::Partial(counts)
+        }
     }
 }
 
@@ -193,16 +209,30 @@ fn terminal_failure(error: &Value) -> ProviderFailure {
     let class = if is_usage_limit(code.as_deref(), &info) {
         FailureClass::UsageLimit
     } else {
-        let transport = ["responseStreamDisconnected", "responseStreamConnectionFailed", "httpConnectionFailed"]
-            .iter()
-            .find_map(|k| info.get(*k));
+        let transport = [
+            "responseStreamDisconnected",
+            "responseStreamConnectionFailed",
+            "httpConnectionFailed",
+        ]
+        .iter()
+        .find_map(|k| info.get(*k));
         match transport {
-            Some(t) if t.get("httpStatusCode").is_none_or(Value::is_null) => FailureClass::TransportError,
+            Some(t) if t.get("httpStatusCode").is_none_or(Value::is_null) => {
+                FailureClass::TransportError
+            }
             _ => FailureClass::ProviderError,
         }
     };
-    let message = str_of(error, "message").unwrap_or("Codex turn failed.").to_string();
-    ProviderFailure { class, message, code, retryable: None, reset_at: None }
+    let message = str_of(error, "message")
+        .unwrap_or("Codex turn failed.")
+        .to_string();
+    ProviderFailure {
+        class,
+        message,
+        code,
+        retryable: None,
+        reset_at: None,
+    }
 }
 
 /// `parseCodexRetryProgress`: "Reconnecting... 2/5".
@@ -212,13 +242,23 @@ fn retry_progress(message: &str) -> Option<(u32, u32)> {
         if *c != '/' {
             continue;
         }
-        let left: String = bytes[..i].iter().rev().skip_while(|c| **c == ' ').take_while(|c| c.is_ascii_digit()).collect();
-        let right: String = bytes[i + 1..].iter().skip_while(|c| **c == ' ').take_while(|c| c.is_ascii_digit()).collect();
+        let left: String = bytes[..i]
+            .iter()
+            .rev()
+            .skip_while(|c| **c == ' ')
+            .take_while(|c| c.is_ascii_digit())
+            .collect();
+        let right: String = bytes[i + 1..]
+            .iter()
+            .skip_while(|c| **c == ' ')
+            .take_while(|c| c.is_ascii_digit())
+            .collect();
         let left: String = left.chars().rev().collect();
-        if let (Ok(a), Ok(b)) = (left.parse::<u32>(), right.parse::<u32>()) {
-            if a >= 1 && b >= 1 {
-                return Some((a, b));
-            }
+        if let (Ok(a), Ok(b)) = (left.parse::<u32>(), right.parse::<u32>())
+            && a >= 1
+            && b >= 1
+        {
+            return Some((a, b));
         }
     }
     None
@@ -234,14 +274,24 @@ fn phase(v: Option<&str>) -> Option<AssistantPhase> {
 }
 
 fn file_change_body(item: &Value) -> TurnItemBody {
-    let changes = item.get("changes").and_then(Value::as_array).cloned().unwrap_or_default();
+    let changes = item
+        .get("changes")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
     let mut details = Vec::new();
     let mut diff = String::new();
     let (mut add, mut del) = (0u32, 0u32);
     for c in &changes {
         let path = str_of(c, "path").unwrap_or_default().to_string();
-        let kind = c.get("kind").and_then(|k| str_of(k, "type")).unwrap_or("update");
-        let move_path = c.get("kind").and_then(|k| str_of(k, "move_path")).map(str::to_string);
+        let kind = c
+            .get("kind")
+            .and_then(|k| str_of(k, "type"))
+            .unwrap_or("update");
+        let move_path = c
+            .get("kind")
+            .and_then(|k| str_of(k, "move_path"))
+            .map(str::to_string);
         let d = str_of(c, "diff").unwrap_or_default();
         match kind {
             // add/delete carry the file content, not a diff.
@@ -258,7 +308,11 @@ fn file_change_body(item: &Value) -> TurnItemBody {
         }
         diff.push_str(d);
         details.push(FileChangeDetail {
-            operation: if move_path.is_some() { "move".into() } else { kind.to_string() },
+            operation: if move_path.is_some() {
+                "move".into()
+            } else {
+                kind.to_string()
+            },
             path: move_path.clone().unwrap_or_else(|| path.clone()),
             old_path: move_path.map(|_| path),
             file_type: None,
@@ -294,17 +348,22 @@ fn web_search_patterns(item: &Value) -> Option<Vec<String>> {
             }
         }
     }
-    if out.is_empty() {
-        if let Some(q) = str_of(item, "query").filter(|q| !q.is_empty()) {
-            out.push(q.to_string());
-        }
+    if out.is_empty()
+        && let Some(q) = str_of(item, "query").filter(|q| !q.is_empty())
+    {
+        out.push(q.to_string());
     }
     out.dedup();
     (!out.is_empty()).then_some(out)
 }
 
 impl CodexMapper {
-    pub fn new(thread_id: &str, live_session_id: &str, emitter: Emitter, runtime_mode: RuntimeMode) -> Self {
+    pub fn new(
+        thread_id: &str,
+        live_session_id: &str,
+        emitter: Emitter,
+        runtime_mode: RuntimeMode,
+    ) -> Self {
         Self {
             thread_id: thread_id.to_string(),
             live_session_id: live_session_id.to_string(),
@@ -366,7 +425,11 @@ impl CodexMapper {
 
     /// turn/start was rejected: forget the turn without a terminal.
     pub fn abort_turn(&mut self, run_id: &str) {
-        if self.active.as_ref().is_some_and(|t| t.run_id == run_id && !t.accepted) {
+        if self
+            .active
+            .as_ref()
+            .is_some_and(|t| t.run_id == run_id && !t.accepted)
+        {
             self.active = None;
         }
     }
@@ -378,9 +441,13 @@ impl CodexMapper {
     }
 
     fn adopt_turn(&mut self, turn: &Value) -> bool {
-        let Some(id) = str_of(turn, "id") else { return false };
+        let Some(id) = str_of(turn, "id") else {
+            return false;
+        };
         let started = turn.get("startedAt").is_some_and(|s| !s.is_null());
-        let Some(t) = self.active.as_mut() else { return false };
+        let Some(t) = self.active.as_mut() else {
+            return false;
+        };
         match &t.native_turn_id {
             Some(existing) if existing != id => return false,
             _ => {}
@@ -392,7 +459,10 @@ impl CodexMapper {
         let run_id = t.run_id.clone();
         if first {
             self.usage.begin(id);
-            self.emitter.send(ProviderEvent::TurnStarted { run_id, native_turn_id: Some(id.to_string()) });
+            self.emitter.send(ProviderEvent::TurnStarted {
+                run_id,
+                native_turn_id: Some(id.to_string()),
+            });
             self.emitter.send(ProviderEvent::BindingUpdated {
                 native_thread_id: self.native_thread_id.clone(),
                 status: ProviderThreadStatus::Active,
@@ -415,8 +485,15 @@ impl CodexMapper {
         }
     }
 
-    fn turn_matches(&self, params: &Value) -> bool {
+    /// Whether a notification belongs to the active turn. Item frames can beat the
+    /// `turn/start` response to us; one turn runs per thread, so an unknown turn id while
+    /// ours has none yet is ours.
+    fn turn_matches(&mut self, params: &Value) -> bool {
         match (self.active.as_ref(), str_of(params, "turnId")) {
+            (Some(t), Some(id)) if t.native_turn_id.is_none() => {
+                let id = id.to_string();
+                self.adopt_turn(&json!({ "id": id }))
+            }
             (Some(t), Some(id)) => t.native_turn_id.as_deref() == Some(id),
             (Some(_), None) => true,
             _ => false,
@@ -424,10 +501,17 @@ impl CodexMapper {
     }
 
     pub fn flush(&mut self, include_slow: bool) {
-        let Some(t) = self.active.as_mut() else { return };
+        let Some(t) = self.active.as_mut() else {
+            return;
+        };
         let items = t.items.take_dirty(include_slow);
         for item in &items {
-            if let TurnItemBody::ProposedPlan { plan_id, markdown, streaming } = &item.body {
+            if let TurnItemBody::ProposedPlan {
+                plan_id,
+                markdown,
+                streaming,
+            } = &item.body
+            {
                 self.emitter.send(ProviderEvent::PlanUpdated {
                     plan_id: plan_id.clone(),
                     markdown: markdown.clone(),
@@ -440,31 +524,40 @@ impl CodexMapper {
 
     /// Any non-command progress clears the "retrying" banner (`completeProviderRetry`).
     fn clear_retry(&mut self) {
-        let Some(t) = self.active.as_mut() else { return };
-        if let Some(key) = t.retry_key.take() {
-            if let Some(item) = t.items.update(&key, |i| i.status = ItemStatus::Completed) {
-                self.emitter.send(ProviderEvent::ItemUpserted(item));
-            }
+        let Some(t) = self.active.as_mut() else {
+            return;
+        };
+        if let Some(key) = t.retry_key.take()
+            && let Some(item) = t.items.update(&key, |i| i.status = ItemStatus::Completed)
+        {
+            self.emitter.send(ProviderEvent::ItemUpserted(item));
         }
     }
 
     pub fn on_notification(&mut self, method: &str, params: &Value) {
         match method {
             "turn/started" => {
-                if let Some(turn) = params.get("turn") {
-                    if self.active.as_ref().is_some_and(|t| t.native_turn_id.is_none() || t.native_turn_id.as_deref() == str_of(turn, "id")) {
-                        self.adopt_turn(turn);
-                        if let Some(t) = self.active.as_mut() {
-                            t.native_started = true;
-                        }
+                if let Some(turn) = params.get("turn")
+                    && self.active.as_ref().is_some_and(|t| {
+                        t.native_turn_id.is_none()
+                            || t.native_turn_id.as_deref() == str_of(turn, "id")
+                    })
+                {
+                    self.adopt_turn(turn);
+                    if let Some(t) = self.active.as_mut() {
+                        t.native_started = true;
                     }
                 }
             }
             "turn/completed" => {
-                if let Some(turn) = params.get("turn") {
-                    if self.active.as_ref().and_then(|t| t.native_turn_id.as_deref()) == str_of(turn, "id") {
-                        self.complete_turn(turn);
-                    }
+                if let Some(turn) = params.get("turn")
+                    && self
+                        .active
+                        .as_ref()
+                        .and_then(|t| t.native_turn_id.as_deref())
+                        == str_of(turn, "id")
+                {
+                    self.complete_turn(turn);
                 }
             }
             "item/started" | "item/completed" => {
@@ -481,34 +574,59 @@ impl CodexMapper {
             "item/reasoning/textDelta" => self.on_text_delta(params, "content"),
             "item/plan/delta" => self.on_text_delta(params, "plan"),
             "item/commandExecution/outputDelta" => {
-                let (Some(item_id), Some(delta)) = (str_of(params, "itemId"), str_of(params, "delta")) else { return };
-                let tern_id = self.active.as_ref().and_then(|t| t.items.get(item_id)).map(|i| i.id.clone());
+                let (Some(item_id), Some(delta)) =
+                    (str_of(params, "itemId"), str_of(params, "delta"))
+                else {
+                    return;
+                };
+                let tern_id = self
+                    .active
+                    .as_ref()
+                    .and_then(|t| t.items.get(item_id))
+                    .map(|i| i.id.clone());
                 if let Some(id) = tern_id {
-                    self.emitter.send(ProviderEvent::CommandOutputDelta { item_id: id, chunk: delta.to_string() });
+                    self.emitter.send(ProviderEvent::CommandOutputDelta {
+                        item_id: id,
+                        chunk: delta.to_string(),
+                    });
                 }
             }
             "turn/plan/updated" => self.on_todo(params),
             "thread/tokenUsage/updated" => self.on_token_usage(params),
             "error" => self.on_error(params),
             "model/rerouted" => {
-                if self.turn_matches(params) {
-                    if let (Some(t), Some(to)) = (self.active.as_mut(), str_of(params, "toModel")) {
-                        t.model = Some(to.to_string());
-                    }
+                if self.turn_matches(params)
+                    && let (Some(t), Some(to)) = (self.active.as_mut(), str_of(params, "toModel"))
+                {
+                    t.model = Some(to.to_string());
                 }
             }
             "serverRequest/resolved" => {
-                let Some(native) = params.get("requestId") else { return };
-                let key = self.pending.iter().find(|(_, p)| &p.native_id == native).map(|(k, _)| k.clone());
+                let Some(native) = params.get("requestId") else {
+                    return;
+                };
+                let key = self
+                    .pending
+                    .iter()
+                    .find(|(_, p)| &p.native_id == native)
+                    .map(|(k, _)| k.clone());
                 if let Some(key) = key {
                     self.close_request(&key, RequestStatus::Cancelled);
                 }
             }
             "thread/closed" => {
                 if let Some(t) = self.active.as_ref().filter(|t| t.accepted) {
-                    let status = if t.interrupting { TerminalStatus::Interrupted } else { TerminalStatus::Failed };
-                    let fail = (status == TerminalStatus::Failed)
-                        .then(|| failure(FailureClass::ProviderError, "Codex closed the thread during the turn."));
+                    let status = if t.interrupting {
+                        TerminalStatus::Interrupted
+                    } else {
+                        TerminalStatus::Failed
+                    };
+                    let fail = (status == TerminalStatus::Failed).then(|| {
+                        failure(
+                            FailureClass::ProviderError,
+                            "Codex closed the thread during the turn.",
+                        )
+                    });
                     self.finish(status, fail, Some("thread closed".into()), false);
                 }
             }
@@ -520,14 +638,31 @@ impl CodexMapper {
         if !self.turn_matches(params) {
             return;
         }
-        let (Some(item_id), Some(delta)) = (str_of(params, "itemId"), str_of(params, "delta")) else { return };
+        let (Some(item_id), Some(delta)) = (str_of(params, "itemId"), str_of(params, "delta"))
+        else {
+            return;
+        };
         if kind != "content" {
             self.clear_retry();
         }
-        let Some(t) = self.active.as_mut() else { return };
+        let Some(t) = self.active.as_mut() else {
+            return;
+        };
         let (key, slow) = match kind {
-            "summary" => (format!("{item_id}:summary:{}", u64_of(params, "summaryIndex").unwrap_or(0)), false),
-            "content" => (format!("{item_id}:content:{}", u64_of(params, "contentIndex").unwrap_or(0)), false),
+            "summary" => (
+                format!(
+                    "{item_id}:summary:{}",
+                    u64_of(params, "summaryIndex").unwrap_or(0)
+                ),
+                false,
+            ),
+            "content" => (
+                format!(
+                    "{item_id}:content:{}",
+                    u64_of(params, "contentIndex").unwrap_or(0)
+                ),
+                false,
+            ),
             "plan" => (item_id.to_string(), true),
             _ => (item_id.to_string(), false),
         };
@@ -544,12 +679,18 @@ impl CodexMapper {
                     markdown: String::new(),
                     streaming: true,
                 },
-                _ => TurnItemBody::Reasoning { text: String::new(), streaming: true },
+                _ => TurnItemBody::Reasoning {
+                    text: String::new(),
+                    streaming: true,
+                },
             };
-            t.items.upsert(&key, Some(item_id), body, ItemStatus::Running, None);
+            t.items
+                .upsert(&key, Some(item_id), body, ItemStatus::Running, None);
         }
         t.items.update_quiet(&key, slow, |i| match &mut i.body {
-            TurnItemBody::AssistantMessage { text, .. } | TurnItemBody::Reasoning { text, .. } => text.push_str(delta),
+            TurnItemBody::AssistantMessage { text, .. } | TurnItemBody::Reasoning { text, .. } => {
+                text.push_str(delta)
+            }
             TurnItemBody::ProposedPlan { markdown, .. } => markdown.push_str(delta),
             _ => {}
         });
@@ -558,9 +699,15 @@ impl CodexMapper {
     fn on_item(&mut self, item: &Value, completed: bool) {
         let Some(id) = str_of(item, "id") else { return };
         let ty = str_of(item, "type").unwrap_or_default();
-        let status = if completed { item_status(str_of(item, "status").or(Some("completed"))) } else { ItemStatus::Running };
+        let status = if completed {
+            item_status(str_of(item, "status").or(Some("completed")))
+        } else {
+            ItemStatus::Running
+        };
         let emitter = self.emitter.clone();
-        let Some(t) = self.active.as_mut() else { return };
+        let Some(t) = self.active.as_mut() else {
+            return;
+        };
         let emit = |item: TurnItem| emitter.send(ProviderEvent::ItemUpserted(item));
         match ty {
             "agentMessage" => {
@@ -571,7 +718,17 @@ impl CodexMapper {
                     streaming: !completed,
                     phase: phase(str_of(item, "phase")),
                 };
-                let snap = t.items.upsert(id, Some(id), body, if completed { ItemStatus::Completed } else { ItemStatus::Running }, None);
+                let snap = t.items.upsert(
+                    id,
+                    Some(id),
+                    body,
+                    if completed {
+                        ItemStatus::Completed
+                    } else {
+                        ItemStatus::Running
+                    },
+                    None,
+                );
                 // Started with no text yet: the first delta emits it.
                 if completed {
                     emit(snap);
@@ -582,18 +739,35 @@ impl CodexMapper {
                     return;
                 }
                 for (part, key) in [("summary", "summary"), ("content", "content")] {
-                    let parts = item.get(part).and_then(Value::as_array).cloned().unwrap_or_default();
+                    let parts = item
+                        .get(part)
+                        .and_then(Value::as_array)
+                        .cloned()
+                        .unwrap_or_default();
                     for (i, p) in parts.iter().enumerate() {
-                        let Some(text) = p.as_str().filter(|s| !s.is_empty()) else { continue };
+                        let Some(text) = p.as_str().filter(|s| !s.is_empty()) else {
+                            continue;
+                        };
                         let k = format!("{id}:{key}:{i}");
-                        let body = TurnItemBody::Reasoning { text: text.to_string(), streaming: false };
-                        emit(t.items.upsert(&k, Some(id), body, ItemStatus::Completed, None));
+                        let body = TurnItemBody::Reasoning {
+                            text: text.to_string(),
+                            streaming: false,
+                        };
+                        emit(
+                            t.items
+                                .upsert(&k, Some(id), body, ItemStatus::Completed, None),
+                        );
                     }
                 }
                 // Parts that only streamed: close them too.
                 let prefix = format!("{id}:");
                 let open: Vec<String> = (0..64)
-                    .flat_map(|i| [format!("{prefix}summary:{i}"), format!("{prefix}content:{i}")])
+                    .flat_map(|i| {
+                        [
+                            format!("{prefix}summary:{i}"),
+                            format!("{prefix}content:{i}"),
+                        ]
+                    })
                     .filter(|k| t.items.get(k).is_some_and(|it| it.status.is_open()))
                     .collect();
                 for k in open {
@@ -608,7 +782,10 @@ impl CodexMapper {
                 }
             }
             "commandExecution" => {
-                let exit_code = item.get("exitCode").and_then(Value::as_i64).map(|c| c as i32);
+                let exit_code = item
+                    .get("exitCode")
+                    .and_then(Value::as_i64)
+                    .map(|c| c as i32);
                 let body = TurnItemBody::CommandExecution {
                     input: str_of(item, "command").unwrap_or_default().to_string(),
                     output: str_of(item, "aggregatedOutput").map(str::to_string),
@@ -618,10 +795,23 @@ impl CodexMapper {
                 };
                 emit(t.items.upsert(id, Some(id), body, status, None));
             }
-            "fileChange" => emit(t.items.upsert(id, Some(id), file_change_body(item), status, None)),
+            "fileChange" => {
+                emit(
+                    t.items
+                        .upsert(id, Some(id), file_change_body(item), status, None),
+                )
+            }
             "mcpToolCall" => {
-                let name = format!("{}/{}", str_of(item, "server").unwrap_or("mcp"), str_of(item, "tool").unwrap_or("tool"));
-                let output = item.get("result").filter(|r| !r.is_null()).cloned().or_else(|| item.get("error").filter(|e| !e.is_null()).cloned());
+                let name = format!(
+                    "{}/{}",
+                    str_of(item, "server").unwrap_or("mcp"),
+                    str_of(item, "tool").unwrap_or("tool")
+                );
+                let output = item
+                    .get("result")
+                    .filter(|r| !r.is_null())
+                    .cloned()
+                    .or_else(|| item.get("error").filter(|e| !e.is_null()).cloned());
                 let body = TurnItemBody::DynamicTool {
                     tool_name: Some(name),
                     input: item.get("arguments").cloned().unwrap_or(Value::Null),
@@ -638,28 +828,63 @@ impl CodexMapper {
                 emit(t.items.upsert(id, Some(id), body, status, None));
             }
             "webSearch" => {
-                let body = TurnItemBody::WebSearch { patterns: web_search_patterns(item), results: None };
+                let body = TurnItemBody::WebSearch {
+                    patterns: web_search_patterns(item),
+                    results: None,
+                };
                 emit(t.items.upsert(id, Some(id), body, status, None));
             }
             "plan" => {
-                let plan_id = t.plan_ids.entry(id.to_string()).or_insert_with(new_id).clone();
+                let plan_id = t
+                    .plan_ids
+                    .entry(id.to_string())
+                    .or_insert_with(new_id)
+                    .clone();
                 if !completed {
-                    let body = TurnItemBody::ProposedPlan { plan_id, markdown: String::new(), streaming: true };
-                    t.items.upsert(id, Some(id), body, ItemStatus::Running, None);
+                    let body = TurnItemBody::ProposedPlan {
+                        plan_id,
+                        markdown: String::new(),
+                        streaming: true,
+                    };
+                    t.items
+                        .upsert(id, Some(id), body, ItemStatus::Running, None);
                     return;
                 }
                 let markdown = str_of(item, "text").unwrap_or_default().to_string();
                 // An interrupted turn leaves its plan unfinished (CA:4930-4939).
-                let st = if t.interrupting { ItemStatus::Interrupted } else { ItemStatus::Completed };
-                let body = TurnItemBody::ProposedPlan { plan_id: plan_id.clone(), markdown: markdown.clone(), streaming: false };
+                let st = if t.interrupting {
+                    ItemStatus::Interrupted
+                } else {
+                    ItemStatus::Completed
+                };
+                let body = TurnItemBody::ProposedPlan {
+                    plan_id: plan_id.clone(),
+                    markdown: markdown.clone(),
+                    streaming: false,
+                };
                 let snap = t.items.upsert(id, Some(id), body, st, None);
-                emitter.send(ProviderEvent::PlanUpdated { plan_id, markdown, streaming: false });
+                emitter.send(ProviderEvent::PlanUpdated {
+                    plan_id,
+                    markdown,
+                    streaming: false,
+                });
                 emit(snap);
             }
             "contextCompaction" => {
-                let title = if completed { "Context compacted" } else { "Compacting context" };
-                let body = TurnItemBody::Compaction { summary: None, before_token_count: None, after_token_count: None };
-                emit(t.items.upsert(id, Some(id), body, status, Some(title.into())));
+                let title = if completed {
+                    "Context compacted"
+                } else {
+                    "Compacting context"
+                };
+                let body = TurnItemBody::Compaction {
+                    summary: None,
+                    before_token_count: None,
+                    after_token_count: None,
+                };
+                emit(
+                    t.items
+                        .upsert(id, Some(id), body, status, Some(title.into())),
+                );
             }
             "imageView" if completed => {
                 let body = TurnItemBody::DynamicTool {
@@ -667,15 +892,25 @@ impl CodexMapper {
                     input: json!({ "path": str_of(item, "path") }),
                     output: None,
                 };
-                emit(t.items.upsert(id, Some(id), body, ItemStatus::Completed, None));
+                emit(
+                    t.items
+                        .upsert(id, Some(id), body, ItemStatus::Completed, None),
+                );
             }
             "imageGeneration" => {
                 let body = TurnItemBody::DynamicTool {
                     tool_name: Some("image_generation".into()),
                     input: json!({ "revisedPrompt": item.get("revisedPrompt") }),
-                    output: item.get("savedPath").filter(|p| !p.is_null()).map(|p| json!({ "savedPath": p })),
+                    output: item
+                        .get("savedPath")
+                        .filter(|p| !p.is_null())
+                        .map(|p| json!({ "savedPath": p })),
                 };
-                let st = if completed { item_status(str_of(item, "status").filter(|s| *s != "generating")) } else { ItemStatus::Running };
+                let st = if completed {
+                    item_status(str_of(item, "status").filter(|s| *s != "generating"))
+                } else {
+                    ItemStatus::Running
+                };
                 emit(t.items.upsert(id, Some(id), body, st, None));
             }
             "collabAgentToolCall" => {
@@ -694,7 +929,11 @@ impl CodexMapper {
                     progress: str_of(item, "tool").map(str::to_string),
                     result: None,
                 };
-                let st = if completed { ItemStatus::Completed } else { ItemStatus::Running };
+                let st = if completed {
+                    ItemStatus::Completed
+                } else {
+                    ItemStatus::Running
+                };
                 emit(t.items.upsert(id, Some(id), body, st, None));
             }
             "subAgentActivity" => t.has_subagents = true,
@@ -707,7 +946,9 @@ impl CodexMapper {
             return;
         }
         let turn_id = str_of(params, "turnId").unwrap_or_default();
-        let Some(t) = self.active.as_mut() else { return };
+        let Some(t) = self.active.as_mut() else {
+            return;
+        };
         let key = format!("turn-plan:{turn_id}");
         let plan_id = t.plan_ids.entry(key.clone()).or_insert_with(new_id).clone();
         let steps: Vec<PlanStep> = params
@@ -718,7 +959,10 @@ impl CodexMapper {
                     .enumerate()
                     .map(|(i, s)| PlanStep {
                         id: format!("step-{}", i + 1),
-                        text: str_of(s, "step").filter(|t| !t.is_empty()).map(str::to_string).unwrap_or_else(|| format!("Step {}", i + 1)),
+                        text: str_of(s, "step")
+                            .filter(|t| !t.is_empty())
+                            .map(str::to_string)
+                            .unwrap_or_else(|| format!("Step {}", i + 1)),
                         status: match str_of(s, "status") {
                             Some("completed") => PlanStepStatus::Completed,
                             Some("inProgress") => PlanStepStatus::Running,
@@ -731,14 +975,26 @@ impl CodexMapper {
             })
             .unwrap_or_default();
         let explanation = str_of(params, "explanation").map(str::to_string);
-        let body = TurnItemBody::TodoList { plan_id: plan_id.clone(), steps: steps.clone(), explanation: explanation.clone() };
-        let item = t.items.upsert(&key, Some(&key), body, ItemStatus::Completed, None);
-        self.emitter.send(ProviderEvent::TodoUpdated { plan_id, steps, explanation });
+        let body = TurnItemBody::TodoList {
+            plan_id: plan_id.clone(),
+            steps: steps.clone(),
+            explanation: explanation.clone(),
+        };
+        let item = t
+            .items
+            .upsert(&key, Some(&key), body, ItemStatus::Completed, None);
+        self.emitter.send(ProviderEvent::TodoUpdated {
+            plan_id,
+            steps,
+            explanation,
+        });
         self.emitter.send(ProviderEvent::ItemUpserted(item));
     }
 
     fn on_token_usage(&mut self, params: &Value) {
-        let Some(u) = params.get("tokenUsage") else { return };
+        let Some(u) = params.get("tokenUsage") else {
+            return;
+        };
         let total = u.get("total").map(Breakdown::from).unwrap_or_default();
         let last_v = u.get("last").cloned().unwrap_or(Value::Null);
         let last = Breakdown::from(&last_v);
@@ -756,7 +1012,11 @@ impl CodexMapper {
             auto_compact_threshold: None,
         };
         self.context_usage = Some(ctx.clone());
-        let status = if self.active.is_some() { ProviderThreadStatus::Active } else { ProviderThreadStatus::Idle };
+        let status = if self.active.is_some() {
+            ProviderThreadStatus::Active
+        } else {
+            ProviderThreadStatus::Idle
+        };
         self.emitter.send(ProviderEvent::BindingUpdated {
             native_thread_id: self.native_thread_id.clone(),
             status,
@@ -771,9 +1031,16 @@ impl CodexMapper {
         let error = params.get("error").cloned().unwrap_or(Value::Null);
         let info = error.get("codexErrorInfo").cloned().unwrap_or(Value::Null);
         let code = error_info_code(&info);
-        let message = str_of(&error, "message").unwrap_or("Codex error").to_string();
-        let will_retry = params.get("willRetry").and_then(Value::as_bool).unwrap_or(false);
-        let Some(t) = self.active.as_mut() else { return };
+        let message = str_of(&error, "message")
+            .unwrap_or("Codex error")
+            .to_string();
+        let will_retry = params
+            .get("willRetry")
+            .and_then(Value::as_bool)
+            .unwrap_or(false);
+        let Some(t) = self.active.as_mut() else {
+            return;
+        };
         if !will_retry {
             let mut f = terminal_failure(&error);
             if let Some(d) = str_of(&error, "additionalDetails").filter(|d| !d.is_empty()) {
@@ -784,28 +1051,46 @@ impl CodexMapper {
         }
         let class = if is_usage_limit(code.as_deref(), &info) {
             FailureClass::UsageLimit
-        } else if code.as_deref().is_some_and(|c| c.starts_with("http") || c.starts_with("responseStream")) {
+        } else if code
+            .as_deref()
+            .is_some_and(|c| c.starts_with("http") || c.starts_with("responseStream"))
+        {
             FailureClass::TransportError
         } else {
             FailureClass::ProviderError
         };
-        let detail = str_of(&error, "additionalDetails").filter(|d| !d.is_empty()).map(str::to_string);
+        let detail = str_of(&error, "additionalDetails")
+            .filter(|d| !d.is_empty())
+            .map(str::to_string);
         let retry = retry_progress(&message).map(|(attempt, max)| ProviderRetry {
             attempt,
             max_attempts: Some(max),
             retry_delay_ms: None,
         });
         let body = TurnItemBody::Error {
-            failure: ProviderFailure { class, message: detail.unwrap_or(message.clone()), code, retryable: Some(true), reset_at: None },
+            failure: ProviderFailure {
+                class,
+                message: detail.unwrap_or(message.clone()),
+                code,
+                retryable: Some(true),
+                reset_at: None,
+            },
             retry,
         };
-        let key = t.retry_key.get_or_insert_with(|| format!("retry:{}", new_id())).clone();
-        let item = t.items.upsert(&key, None, body, ItemStatus::Running, Some(message));
+        let key = t
+            .retry_key
+            .get_or_insert_with(|| format!("retry:{}", new_id()))
+            .clone();
+        let item = t
+            .items
+            .upsert(&key, None, body, ItemStatus::Running, Some(message));
         self.emitter.send(ProviderEvent::ItemUpserted(item));
     }
 
     fn complete_turn(&mut self, turn: &Value) {
-        let Some(t) = self.active.as_ref() else { return };
+        let Some(t) = self.active.as_ref() else {
+            return;
+        };
         let mut status = match str_of(turn, "status") {
             Some("completed") => TerminalStatus::Completed,
             Some("interrupted") => TerminalStatus::Interrupted,
@@ -818,7 +1103,10 @@ impl CodexMapper {
         let fail = if status == TerminalStatus::Failed {
             Some(match turn.get("error").filter(|e| !e.is_null()) {
                 Some(e) => terminal_failure(e),
-                None => t.last_failure.clone().unwrap_or_else(|| failure(FailureClass::ProviderError, "Codex turn failed.")),
+                None => t
+                    .last_failure
+                    .clone()
+                    .unwrap_or_else(|| failure(FailureClass::ProviderError, "Codex turn failed.")),
             })
         } else {
             None
@@ -827,25 +1115,41 @@ impl CodexMapper {
     }
 
     /// Closes the active turn: flush, settle items and requests, usage, terminal.
-    pub fn finish(&mut self, status: TerminalStatus, fail: Option<ProviderFailure>, reason: Option<String>, broken: bool) {
+    pub fn finish(
+        &mut self,
+        status: TerminalStatus,
+        fail: Option<ProviderFailure>,
+        reason: Option<String>,
+        broken: bool,
+    ) {
         self.flush(true);
-        let Some(mut t) = self.active.take() else { return };
-        if let Some(key) = t.retry_key.take() {
-            if let Some(item) = t.items.update(&key, |i| i.status = ItemStatus::Completed) {
-                self.emitter.send(ProviderEvent::ItemUpserted(item));
-            }
+        let Some(mut t) = self.active.take() else {
+            return;
+        };
+        if let Some(key) = t.retry_key.take()
+            && let Some(item) = t.items.update(&key, |i| i.status = ItemStatus::Completed)
+        {
+            self.emitter.send(ProviderEvent::ItemUpserted(item));
         }
         let open_status = match status {
             TerminalStatus::Completed => ItemStatus::Completed,
             TerminalStatus::Failed if broken => ItemStatus::Failed,
             _ => ItemStatus::Interrupted,
         };
-        let pending: Vec<String> =
-            self.pending.iter().filter(|(_, p)| p.run_id == t.run_id).map(|(k, _)| k.clone()).collect();
+        let pending: Vec<String> = self
+            .pending
+            .iter()
+            .filter(|(_, p)| p.run_id == t.run_id)
+            .map(|(k, _)| k.clone())
+            .collect();
         for key in pending {
             if let Some(p) = self.pending.remove(&key) {
-                self.emitter.send(ProviderEvent::RequestClosed { request_id: key, status: RequestStatus::Cancelled });
-                t.items.update_quiet(&p.item_key, false, |i| i.status = ItemStatus::Cancelled);
+                self.emitter.send(ProviderEvent::RequestClosed {
+                    request_id: key,
+                    status: RequestStatus::Cancelled,
+                });
+                t.items
+                    .update_quiet(&p.item_key, false, |i| i.status = ItemStatus::Cancelled);
             }
         }
         let mut settled = t.items.take_dirty(true);
@@ -854,9 +1158,23 @@ impl CodexMapper {
         if !t.accepted {
             return;
         }
-        let usage = self.usage.finish(status == TerminalStatus::Completed, t.has_subagents, t.model.clone().or(self.model.clone()));
-        self.emitter.send(ProviderEvent::TurnUsage { run_id: t.run_id.clone(), usage, model: t.model.clone() });
-        self.emitter.send(ProviderEvent::TurnTerminal { run_id: t.run_id, status, failure: fail, reason, broken });
+        let usage = self.usage.finish(
+            status == TerminalStatus::Completed,
+            t.has_subagents,
+            t.model.clone().or(self.model.clone()),
+        );
+        self.emitter.send(ProviderEvent::TurnUsage {
+            run_id: t.run_id.clone(),
+            usage,
+            model: t.model.clone(),
+        });
+        self.emitter.send(ProviderEvent::TurnTerminal {
+            run_id: t.run_id,
+            status,
+            failure: fail,
+            reason,
+            broken,
+        });
         if !broken {
             self.emitter.send(ProviderEvent::BindingUpdated {
                 native_thread_id: self.native_thread_id.clone(),
@@ -878,15 +1196,28 @@ impl CodexMapper {
         if self.active.as_ref().is_some_and(|t| t.accepted) {
             let interrupted = self.active.as_ref().is_some_and(|t| t.interrupting);
             if interrupted {
-                self.finish(TerminalStatus::Interrupted, None, Some(message.to_string()), true);
+                self.finish(
+                    TerminalStatus::Interrupted,
+                    None,
+                    Some(message.to_string()),
+                    true,
+                );
             } else {
-                self.finish(TerminalStatus::Failed, Some(failure(class, message)), Some(message.to_string()), true);
+                self.finish(
+                    TerminalStatus::Failed,
+                    Some(failure(class, message)),
+                    Some(message.to_string()),
+                    true,
+                );
             }
         } else {
             self.active = None;
         }
         for (key, _) in std::mem::take(&mut self.pending) {
-            self.emitter.send(ProviderEvent::RequestClosed { request_id: key, status: RequestStatus::Cancelled });
+            self.emitter.send(ProviderEvent::RequestClosed {
+                request_id: key,
+                status: RequestStatus::Cancelled,
+            });
         }
         self.emitter.send(ProviderEvent::BindingUpdated {
             native_thread_id: self.native_thread_id.clone(),
@@ -902,16 +1233,21 @@ impl CodexMapper {
     }
 
     fn close_request(&mut self, key: &str, status: RequestStatus) {
-        let Some(p) = self.pending.remove(key) else { return };
-        self.emitter.send(ProviderEvent::RequestClosed { request_id: key.to_string(), status });
-        if let Some(t) = self.active.as_mut() {
-            if let Some(item) = t.items.update(&p.item_key, |i| {
+        let Some(p) = self.pending.remove(key) else {
+            return;
+        };
+        self.emitter.send(ProviderEvent::RequestClosed {
+            request_id: key.to_string(),
+            status,
+        });
+        if let Some(t) = self.active.as_mut()
+            && let Some(item) = t.items.update(&p.item_key, |i| {
                 if i.status.is_open() {
                     i.status = ItemStatus::Cancelled;
                 }
-            }) {
-                self.emitter.send(ProviderEvent::ItemUpserted(item));
-            }
+            })
+        {
+            self.emitter.send(ProviderEvent::ItemUpserted(item));
         }
     }
 
@@ -931,8 +1267,22 @@ impl CodexMapper {
         };
         let key = format!("request:{native_id}");
         let req_id = new_id();
-        let item = t.items.upsert(&key, None, with_request_id(body, &req_id), ItemStatus::Waiting, title);
-        let req = runtime_request(req_id, &self.thread_id, Some(t.run_id.clone()), &item.id, native_id.clone(), kind, &self.live_session_id);
+        let item = t.items.upsert(
+            &key,
+            None,
+            with_request_id(body, &req_id),
+            ItemStatus::Waiting,
+            title,
+        );
+        let req = runtime_request(
+            req_id,
+            &self.thread_id,
+            Some(t.run_id.clone()),
+            &item.id,
+            native_id.clone(),
+            kind,
+            &self.live_session_id,
+        );
         self.pending.insert(
             req.id.clone(),
             PendingRequest {
@@ -955,7 +1305,11 @@ impl CodexMapper {
         ServerReply::Deferred
     }
 
-    fn approval_body(kind: RequestKind, prompt: Option<String>, reason: Option<String>) -> TurnItemBody {
+    fn approval_body(
+        kind: RequestKind,
+        prompt: Option<String>,
+        reason: Option<String>,
+    ) -> TurnItemBody {
         TurnItemBody::ApprovalRequest {
             request_id: String::new(),
             request_kind: kind,
@@ -973,7 +1327,9 @@ impl CodexMapper {
         match method {
             "item/commandExecution/requestApproval" | "execCommandApproval" => {
                 let legacy = method == "execCommandApproval";
-                let network = params.get("networkApprovalContext").filter(|n| !n.is_null());
+                let network = params
+                    .get("networkApprovalContext")
+                    .filter(|n| !n.is_null());
                 let has_amendments = params
                     .get("proposedNetworkPolicyAmendments")
                     .and_then(Value::as_array)
@@ -982,11 +1338,19 @@ impl CodexMapper {
                     return ServerReply::Result(decision_value(legacy, ApprovalDecision::Accept));
                 }
                 if self.allowances.contains(&RequestKind::Command) {
-                    return ServerReply::Result(decision_value(legacy, ApprovalDecision::AcceptForSession));
+                    return ServerReply::Result(decision_value(
+                        legacy,
+                        ApprovalDecision::AcceptForSession,
+                    ));
                 }
                 let command = match params.get("command") {
                     Some(Value::String(s)) => Some(s.clone()),
-                    Some(Value::Array(a)) => Some(a.iter().filter_map(Value::as_str).collect::<Vec<_>>().join(" ")),
+                    Some(Value::Array(a)) => Some(
+                        a.iter()
+                            .filter_map(Value::as_str)
+                            .collect::<Vec<_>>()
+                            .join(" "),
+                    ),
                     _ => None,
                 };
                 let mut lines: Vec<String> = command.into_iter().collect();
@@ -994,10 +1358,21 @@ impl CodexMapper {
                     lines.push(format!("cwd {cwd}"));
                 }
                 if let Some(n) = network {
-                    lines.push(format!("network {} {}", str_of(n, "protocol").unwrap_or(""), str_of(n, "host").unwrap_or("")));
+                    lines.push(format!(
+                        "network {} {}",
+                        str_of(n, "protocol").unwrap_or(""),
+                        str_of(n, "host").unwrap_or("")
+                    ));
                 }
                 let prompt = (!lines.is_empty()).then(|| lines.join("\n"));
-                self.open_request(id, method, params, RequestKind::Command, Self::approval_body(RequestKind::Command, prompt, reason), None)
+                self.open_request(
+                    id,
+                    method,
+                    params,
+                    RequestKind::Command,
+                    Self::approval_body(RequestKind::Command, prompt, reason),
+                    None,
+                )
             }
             "item/fileChange/requestApproval" | "applyPatchApproval" => {
                 let legacy = method == "applyPatchApproval";
@@ -1005,19 +1380,40 @@ impl CodexMapper {
                     return ServerReply::Result(decision_value(legacy, ApprovalDecision::Accept));
                 }
                 if self.allowances.contains(&RequestKind::FileChange) {
-                    return ServerReply::Result(decision_value(legacy, ApprovalDecision::AcceptForSession));
+                    return ServerReply::Result(decision_value(
+                        legacy,
+                        ApprovalDecision::AcceptForSession,
+                    ));
                 }
                 let paths: Vec<String> = if legacy {
-                    params.get("fileChanges").and_then(Value::as_object).map(|o| o.keys().cloned().collect()).unwrap_or_default()
+                    params
+                        .get("fileChanges")
+                        .and_then(Value::as_object)
+                        .map(|o| o.keys().cloned().collect())
+                        .unwrap_or_default()
                 } else {
                     let item_id = str_of(params, "itemId").unwrap_or_default();
-                    match self.active.as_ref().and_then(|t| t.items.get(item_id)).map(|i| &i.body) {
-                        Some(TurnItemBody::FileChange { changes: Some(c), .. }) => c.iter().map(|d| d.path.clone()).collect(),
+                    match self
+                        .active
+                        .as_ref()
+                        .and_then(|t| t.items.get(item_id))
+                        .map(|i| &i.body)
+                    {
+                        Some(TurnItemBody::FileChange {
+                            changes: Some(c), ..
+                        }) => c.iter().map(|d| d.path.clone()).collect(),
                         _ => vec![],
                     }
                 };
                 let prompt = (!paths.is_empty()).then(|| paths.join("\n"));
-                self.open_request(id, method, params, RequestKind::FileChange, Self::approval_body(RequestKind::FileChange, prompt, reason), None)
+                self.open_request(
+                    id,
+                    method,
+                    params,
+                    RequestKind::FileChange,
+                    Self::approval_body(RequestKind::FileChange, prompt, reason),
+                    None,
+                )
             }
             "item/permissions/requestApproval" => {
                 let perms = params.get("permissions").cloned().unwrap_or(json!({}));
@@ -1026,10 +1422,13 @@ impl CodexMapper {
                 }
                 let fs = perms.get("fileSystem");
                 let has = |k: &str| {
-                    fs.and_then(|f| f.get(k)).and_then(Value::as_array).is_some_and(|a| !a.is_empty())
-                        || fs.and_then(|f| f.get("entries")).and_then(Value::as_array).is_some_and(|e| {
-                            e.iter().any(|x| str_of(x, "access") == Some(k))
-                        })
+                    fs.and_then(|f| f.get(k))
+                        .and_then(Value::as_array)
+                        .is_some_and(|a| !a.is_empty())
+                        || fs
+                            .and_then(|f| f.get("entries"))
+                            .and_then(Value::as_array)
+                            .is_some_and(|e| e.iter().any(|x| str_of(x, "access") == Some(k)))
                 };
                 let kind = if has("write") {
                     RequestKind::FileChange
@@ -1039,7 +1438,14 @@ impl CodexMapper {
                     RequestKind::Command
                 };
                 let prompt = Some(serde_json::to_string_pretty(&perms).unwrap_or_default());
-                self.open_request(id, method, params, kind, Self::approval_body(kind, prompt, reason), None)
+                self.open_request(
+                    id,
+                    method,
+                    params,
+                    kind,
+                    Self::approval_body(kind, prompt, reason),
+                    None,
+                )
             }
             "item/tool/requestUserInput" => {
                 let questions: Vec<UserInputQuestion> = params
@@ -1057,8 +1463,11 @@ impl CodexMapper {
                                     .map(|os| {
                                         os.iter()
                                             .map(|o| QuestionOption {
-                                                label: str_of(o, "label").unwrap_or_default().to_string(),
-                                                description: str_of(o, "description").map(str::to_string),
+                                                label: str_of(o, "label")
+                                                    .unwrap_or_default()
+                                                    .to_string(),
+                                                description: str_of(o, "description")
+                                                    .map(str::to_string),
                                                 value: None,
                                                 preview: None,
                                             })
@@ -1073,7 +1482,11 @@ impl CodexMapper {
                             .collect()
                     })
                     .unwrap_or_default();
-                let body = TurnItemBody::UserInputRequest { request_id: String::new(), questions, question_answer: None };
+                let body = TurnItemBody::UserInputRequest {
+                    request_id: String::new(),
+                    questions,
+                    question_answer: None,
+                };
                 self.open_request(id, method, params, RequestKind::UserInput, body, None)
             }
             "mcpServer/elicitation/request" => {
@@ -1086,11 +1499,22 @@ impl CodexMapper {
                     .and_then(Value::as_array)
                     .is_some_and(|r| !r.is_empty());
                 if full {
-                    return ServerReply::Result(if required { json!({ "action": "cancel" }) } else { json!({ "action": "accept", "content": {} }) });
+                    return ServerReply::Result(if required {
+                        json!({ "action": "cancel" })
+                    } else {
+                        json!({ "action": "accept", "content": {} })
+                    });
                 }
                 let prompt = str_of(params, "message").map(str::to_string);
                 let title = str_of(params, "serverName").map(str::to_string);
-                self.open_request(id, method, params, RequestKind::McpElicitation, Self::approval_body(RequestKind::McpElicitation, prompt, None), title)
+                self.open_request(
+                    id,
+                    method,
+                    params,
+                    RequestKind::McpElicitation,
+                    Self::approval_body(RequestKind::McpElicitation, prompt, None),
+                    title,
+                )
             }
             other => ServerReply::Error(-32601, format!("Method not found: {other}")),
         }
@@ -1103,27 +1527,45 @@ impl CodexMapper {
             .pending
             .remove(&key)
             .ok_or_else(|| anyhow::anyhow!("Codex is no longer waiting on request {key}"))?;
-        let decision = response.decision.unwrap_or(if p.kind == RequestKind::UserInput {
-            ApprovalDecision::Accept
-        } else {
-            ApprovalDecision::Decline
-        });
+        // Answered: the engine owns the item from here; keep settle_open off it.
+        if let Some(t) = self.active.as_mut() {
+            let _ = t
+                .items
+                .update(&p.item_key, |i| i.status = ItemStatus::Completed);
+        }
+        let decision = response
+            .decision
+            .unwrap_or(if p.kind == RequestKind::UserInput {
+                ApprovalDecision::Accept
+            } else {
+                ApprovalDecision::Decline
+            });
         let result = match p.method.as_str() {
             "item/commandExecution/requestApproval" | "item/fileChange/requestApproval" => {
-                if matches!(decision, ApprovalDecision::AcceptForSession | ApprovalDecision::AcceptAlways) {
+                if matches!(
+                    decision,
+                    ApprovalDecision::AcceptForSession | ApprovalDecision::AcceptAlways
+                ) {
                     self.allowances.insert(p.kind);
                 }
                 decision_value(false, decision)
             }
             "execCommandApproval" | "applyPatchApproval" => {
-                if matches!(decision, ApprovalDecision::AcceptForSession | ApprovalDecision::AcceptAlways) {
+                if matches!(
+                    decision,
+                    ApprovalDecision::AcceptForSession | ApprovalDecision::AcceptAlways
+                ) {
                     self.allowances.insert(p.kind);
                 }
                 decision_value(true, decision)
             }
             "item/permissions/requestApproval" => match decision {
-                ApprovalDecision::Accept => json!({ "permissions": p.params.get("permissions"), "scope": "turn" }),
-                ApprovalDecision::AcceptForSession => json!({ "permissions": p.params.get("permissions"), "scope": "session" }),
+                ApprovalDecision::Accept => {
+                    json!({ "permissions": p.params.get("permissions"), "scope": "turn" })
+                }
+                ApprovalDecision::AcceptForSession => {
+                    json!({ "permissions": p.params.get("permissions"), "scope": "session" })
+                }
                 _ => json!({ "permissions": {}, "scope": "turn" }),
             },
             "item/tool/requestUserInput" => {
@@ -1136,7 +1578,9 @@ impl CodexMapper {
                 json!({ "answers": answers })
             }
             "mcpServer/elicitation/request" => match decision {
-                ApprovalDecision::Accept | ApprovalDecision::AcceptForSession | ApprovalDecision::AcceptAlways => {
+                ApprovalDecision::Accept
+                | ApprovalDecision::AcceptForSession
+                | ApprovalDecision::AcceptAlways => {
                     let required = p
                         .params
                         .get("requestedSchema")
@@ -1148,8 +1592,12 @@ impl CodexMapper {
                     } else {
                         let mut r = json!({ "action": "accept", "content": {} });
                         match decision {
-                            ApprovalDecision::AcceptForSession => r["_meta"] = json!({ "persist": "session" }),
-                            ApprovalDecision::AcceptAlways => r["_meta"] = json!({ "persist": "always" }),
+                            ApprovalDecision::AcceptForSession => {
+                                r["_meta"] = json!({ "persist": "session" })
+                            }
+                            ApprovalDecision::AcceptAlways => {
+                                r["_meta"] = json!({ "persist": "always" })
+                            }
                             _ => {}
                         }
                         r
@@ -1177,8 +1625,12 @@ fn decision_value(legacy: bool, d: ApprovalDecision) -> Value {
     if legacy {
         return match d {
             ApprovalDecision::Accept => json!({ "decision": "approved" }),
-            ApprovalDecision::AcceptForSession | ApprovalDecision::AcceptAlways => json!({ "decision": "approved_for_session" }),
-            ApprovalDecision::Decline => json!({ "decision": { "denied": { "rejection": "User declined the request." } } }),
+            ApprovalDecision::AcceptForSession | ApprovalDecision::AcceptAlways => {
+                json!({ "decision": "approved_for_session" })
+            }
+            ApprovalDecision::Decline => {
+                json!({ "decision": { "denied": { "rejection": "User declined the request." } } })
+            }
             ApprovalDecision::Cancel => json!({ "decision": "abort" }),
         };
     }
@@ -1206,18 +1658,33 @@ mod tests {
     fn failure_classes() {
         let f = terminal_failure(&json!({"message": "x", "codexErrorInfo": "usageLimitExceeded"}));
         assert_eq!(f.class, FailureClass::UsageLimit);
-        let f = terminal_failure(&json!({"message": "x", "codexErrorInfo": {"httpConnectionFailed": {"httpStatusCode": 422}}}));
-        assert_eq!((f.class, f.code.as_deref()), (FailureClass::ProviderError, Some("httpConnectionFailed")));
-        let f = terminal_failure(&json!({"message": "x", "codexErrorInfo": {"responseStreamDisconnected": {"httpStatusCode": null}}}));
+        let f = terminal_failure(
+            &json!({"message": "x", "codexErrorInfo": {"httpConnectionFailed": {"httpStatusCode": 422}}}),
+        );
+        assert_eq!(
+            (f.class, f.code.as_deref()),
+            (FailureClass::ProviderError, Some("httpConnectionFailed"))
+        );
+        let f = terminal_failure(
+            &json!({"message": "x", "codexErrorInfo": {"responseStreamDisconnected": {"httpStatusCode": null}}}),
+        );
         assert_eq!(f.class, FailureClass::TransportError);
-        let f = terminal_failure(&json!({"message": "x", "codexErrorInfo": {"responseTooManyFailedAttempts": {"httpStatusCode": 429}}}));
+        let f = terminal_failure(
+            &json!({"message": "x", "codexErrorInfo": {"responseTooManyFailedAttempts": {"httpStatusCode": 429}}}),
+        );
         assert_eq!(f.class, FailureClass::UsageLimit);
     }
 
     #[test]
     fn usage_deltas_follow_codex_turn_token_usage() {
         let mut u = UsageState::default();
-        let b = |i, o| Breakdown { input: i, cached: 0, cache_write: Some(0), output: o, reasoning: 0 };
+        let b = |i, o| Breakdown {
+            input: i,
+            cached: 0,
+            cache_write: Some(0),
+            output: o,
+            reasoning: 0,
+        };
         u.record("old", b(100, 10), b(100, 10));
         u.begin("t1");
         u.record("t1", b(150, 15), b(50, 5));
@@ -1230,12 +1697,21 @@ mod tests {
             other => panic!("{other:?}"),
         }
         u.begin("t2");
-        assert!(matches!(u.finish(false, false, None), TurnTokenUsage::Unavailable(_)));
+        assert!(matches!(
+            u.finish(false, false, None),
+            TurnTokenUsage::Unavailable(_)
+        ));
     }
 
     #[test]
     fn decisions_map() {
-        assert_eq!(decision_value(false, ApprovalDecision::AcceptAlways), json!({"decision": "acceptForSession"}));
-        assert_eq!(decision_value(true, ApprovalDecision::Cancel), json!({"decision": "abort"}));
+        assert_eq!(
+            decision_value(false, ApprovalDecision::AcceptAlways),
+            json!({"decision": "acceptForSession"})
+        );
+        assert_eq!(
+            decision_value(true, ApprovalDecision::Cancel),
+            json!({"decision": "abort"})
+        );
     }
 }

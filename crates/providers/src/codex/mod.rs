@@ -89,10 +89,17 @@ impl Inner {
         if self.dead.load(Ordering::SeqCst) {
             return Err(RpcError::Transport("the session already ended".into()));
         }
-        self.out.send(frame.to_string()).map_err(|_| RpcError::Transport("stdin closed".into()))
+        self.out
+            .send(frame.to_string())
+            .map_err(|_| RpcError::Transport("stdin closed".into()))
     }
 
-    async fn request(&self, method: &str, params: Value, timeout: Duration) -> Result<Value, RpcError> {
+    async fn request(
+        &self,
+        method: &str,
+        params: Value,
+        timeout: Duration,
+    ) -> Result<Value, RpcError> {
         let id = self.next_id.fetch_add(1, Ordering::SeqCst);
         let (tx, rx) = oneshot::channel();
         self.pending.lock().unwrap().insert(id, tx);
@@ -159,16 +166,23 @@ impl Inner {
         if line.trim().is_empty() {
             return Ok(());
         }
-        let msg: Value = serde_json::from_str(line).map_err(|e| format!("malformed frame from Codex: {e}"))?;
+        let msg: Value =
+            serde_json::from_str(line).map_err(|e| format!("malformed frame from Codex: {e}"))?;
         let method = msg.get("method").and_then(Value::as_str);
         let id = msg.get("id").filter(|i| i.is_number() || i.is_string());
         match (method, id) {
             (Some(method), Some(id)) => {
                 let params = msg.get("params").cloned().unwrap_or(Value::Null);
-                let reply = self.mapper.lock().unwrap().on_server_request(id.clone(), method, &params);
+                let reply =
+                    self.mapper
+                        .lock()
+                        .unwrap()
+                        .on_server_request(id.clone(), method, &params);
                 let frame = match reply {
                     ServerReply::Result(r) => json!({ "id": id, "result": r }),
-                    ServerReply::Error(code, message) => json!({ "id": id, "error": { "code": code, "message": message } }),
+                    ServerReply::Error(code, message) => {
+                        json!({ "id": id, "error": { "code": code, "message": message } })
+                    }
                     ServerReply::Deferred => return Ok(()),
                 };
                 let _ = self.send_frame(&frame);
@@ -179,20 +193,31 @@ impl Inner {
                 self.turn_progress.notify_waiters();
             }
             (None, Some(_)) if msg.get("result").is_some() || msg.get("error").is_some() => {
-                let id = msg["id"].as_i64().or_else(|| msg["id"].as_str().and_then(|s| s.parse().ok()));
+                let id = msg["id"]
+                    .as_i64()
+                    .or_else(|| msg["id"].as_str().and_then(|s| s.parse().ok()));
                 let tx = id.and_then(|id| self.pending.lock().unwrap().remove(&id));
                 if let Some(tx) = tx {
                     let r = match msg.get("error").filter(|e| !e.is_null()) {
                         Some(e) => Err(RpcError::Rpc {
                             code: e.get("code").and_then(Value::as_i64).unwrap_or(0),
-                            message: e.get("message").and_then(Value::as_str).unwrap_or_default().to_string(),
+                            message: e
+                                .get("message")
+                                .and_then(Value::as_str)
+                                .unwrap_or_default()
+                                .to_string(),
                         }),
                         None => Ok(msg.get("result").cloned().unwrap_or(Value::Null)),
                     };
                     let _ = tx.send(r);
                 }
             }
-            _ => return Err(format!("unroutable frame from Codex: {}", crate::util::truncate_chars(line, 200))),
+            _ => {
+                return Err(format!(
+                    "unroutable frame from Codex: {}",
+                    crate::util::truncate_chars(line, 200)
+                ));
+            }
         }
         Ok(())
     }
@@ -207,7 +232,12 @@ pub struct CodexSession {
 impl CodexSession {
     /// Wires the JSON-RPC plumbing over any byte streams. Tests use in-memory pipes;
     /// [`CodexAdapter::open_session`] passes the child's stdio.
-    pub fn over_io<R, W>(reader: R, writer: W, config: SessionConfig, events: mpsc::UnboundedSender<ProviderEvent>) -> Self
+    pub fn over_io<R, W>(
+        reader: R,
+        writer: W,
+        config: SessionConfig,
+        events: mpsc::UnboundedSender<ProviderEvent>,
+    ) -> Self
     where
         R: AsyncRead + Unpin + Send + 'static,
         W: AsyncWrite + Unpin + Send + 'static,
@@ -228,7 +258,12 @@ impl CodexSession {
     {
         let live_session_id = new_id();
         let (out_tx, mut out_rx) = mpsc::unbounded_channel::<String>();
-        let mut mapper = CodexMapper::new(&config.thread_id, &live_session_id, Emitter(events), config.runtime_mode);
+        let mut mapper = CodexMapper::new(
+            &config.thread_id,
+            &live_session_id,
+            Emitter(events),
+            config.runtime_mode,
+        );
         mapper.set_model(Some(config.model_selection.model.clone()));
         let inner = Arc::new(Inner {
             thread_id: config.thread_id.clone(),
@@ -309,7 +344,7 @@ impl CodexSession {
                     }
                     _ = tick.tick() => {
                         n += 1;
-                        r_inner.mapper.lock().unwrap().flush(n % 8 == 0);
+                        r_inner.mapper.lock().unwrap().flush(n.is_multiple_of(8));
                     }
                 }
             }
@@ -328,9 +363,16 @@ impl CodexSession {
             "clientInfo": { "name": CLIENT_NAME, "title": CLIENT_NAME, "version": env!("CARGO_PKG_VERSION") },
             "capabilities": caps,
         });
-        let result = match self.inner.request("initialize", params, INITIALIZE_TIMEOUT).await {
+        let result = match self
+            .inner
+            .request("initialize", params, INITIALIZE_TIMEOUT)
+            .await
+        {
             Ok(r) => r,
-            Err(RpcError::Rpc { code: -32600, message }) if message.contains("Already initialized") => Value::Null,
+            Err(RpcError::Rpc {
+                code: -32600,
+                message,
+            }) if message.contains("Already initialized") => Value::Null,
             Err(e) => {
                 self.retire();
                 return Err(e.into());
@@ -369,21 +411,40 @@ impl CodexSession {
             let mut attempt = 0;
             loop {
                 attempt += 1;
-                match self.inner.request("thread/resume", params.clone(), REQUEST_DEADLINE).await {
+                match self
+                    .inner
+                    .request("thread/resume", params.clone(), REQUEST_DEADLINE)
+                    .await
+                {
                     Ok(r) => {
-                        native = r.get("thread").and_then(|t| t.get("id")).and_then(Value::as_str).map(str::to_string);
+                        native = r
+                            .get("thread")
+                            .and_then(|t| t.get("id"))
+                            .and_then(Value::as_str)
+                            .map(str::to_string);
                         break;
                     }
                     Err(RpcError::Rpc { message, .. }) if attempt < 3 => {
                         let lower = message.to_ascii_lowercase();
                         if lower.contains("is archived") || lower.contains("codex unarchive") {
-                            let _ = self.inner.request("thread/unarchive", json!({ "threadId": id }), SHORT_TIMEOUT).await;
+                            let _ = self
+                                .inner
+                                .request(
+                                    "thread/unarchive",
+                                    json!({ "threadId": id }),
+                                    SHORT_TIMEOUT,
+                                )
+                                .await;
                         } else if lower.contains("is closing") {
                             tokio::time::sleep(Duration::from_secs(2)).await;
                         } else if lower.contains("already has an active writer") {
-                            anyhow::bail!("This Codex thread is open in another Codex client. Close it there and try again.");
+                            anyhow::bail!(
+                                "This Codex thread is open in another Codex client. Close it there and try again."
+                            );
                         } else {
-                            tracing::warn!("thread/resume failed, starting a new Codex thread: {message}");
+                            tracing::warn!(
+                                "thread/resume failed, starting a new Codex thread: {message}"
+                            );
                             break;
                         }
                     }
@@ -399,7 +460,11 @@ impl CodexSession {
             Some(n) => n,
             None => {
                 let params = json!({ "cwd": cwd, "model": model, "config": self.thread_config() });
-                let r = match self.inner.request("thread/start", params, REQUEST_DEADLINE).await {
+                let r = match self
+                    .inner
+                    .request("thread/start", params, REQUEST_DEADLINE)
+                    .await
+                {
                     Ok(r) => r,
                     Err(e) => {
                         if matches!(e, RpcError::Timeout(_)) {
@@ -463,16 +528,34 @@ impl CodexSession {
                 input.push(json!({ "type": "image", "url": format!("data:{};base64,{}", mime_of(att), read_base64(path)?) }));
             }
         }
-        anyhow::ensure!(!input.is_empty(), "Turn requires non-empty text or attachments.");
+        anyhow::ensure!(
+            !input.is_empty(),
+            "Turn requires non-empty text or attachments."
+        );
         Ok(input)
     }
 
     /// `buildCodexTurnStartParams` (CA:913-1027) with the §3.6.2 policy table.
-    pub fn turn_start_params(native_thread: &str, turn: &TurnRequest, input: Vec<Value>, summary: &str) -> Value {
+    pub fn turn_start_params(
+        native_thread: &str,
+        turn: &TurnRequest,
+        input: Vec<Value>,
+        summary: &str,
+    ) -> Value {
         let (approval, reviewer, sandbox) = match turn.runtime_mode {
-            RuntimeMode::ApprovalRequired => (json!("untrusted"), "user", json!({ "type": "readOnly" })),
-            RuntimeMode::AutoAcceptEdits => (json!("on-request"), "user", json!({ "type": "workspaceWrite" })),
-            RuntimeMode::Auto => (json!("on-request"), "auto_review", json!({ "type": "workspaceWrite" })),
+            RuntimeMode::ApprovalRequired => {
+                (json!("untrusted"), "user", json!({ "type": "readOnly" }))
+            }
+            RuntimeMode::AutoAcceptEdits => (
+                json!("on-request"),
+                "user",
+                json!({ "type": "workspaceWrite" }),
+            ),
+            RuntimeMode::Auto => (
+                json!("on-request"),
+                "auto_review",
+                json!({ "type": "workspaceWrite" }),
+            ),
             RuntimeMode::FullAccess => (
                 json!({ "granular": { "mcp_elicitations": true, "request_permissions": false, "rules": false, "sandbox_approval": false, "skill_approval": false } }),
                 "user",
@@ -562,7 +645,11 @@ impl ProviderSessionHandle for CodexSession {
         // config/read: pass the user's model_reasoning_summary through, else "auto" (CA:8028-8036).
         let summary = match self
             .inner
-            .request("config/read", json!({ "cwd": turn.cwd.display().to_string(), "includeLayers": false }), REQUEST_DEADLINE)
+            .request(
+                "config/read",
+                json!({ "cwd": turn.cwd.display().to_string(), "includeLayers": false }),
+                REQUEST_DEADLINE,
+            )
             .await
         {
             Ok(r) => r
@@ -581,7 +668,11 @@ impl ProviderSessionHandle for CodexSession {
             m.set_model(Some(turn.model_selection.model.clone()));
             m.begin_turn(&turn.run_id, Some(turn.model_selection.model.clone()));
         }
-        match self.inner.request("turn/start", params, REQUEST_DEADLINE).await {
+        match self
+            .inner
+            .request("turn/start", params, REQUEST_DEADLINE)
+            .await
+        {
             Ok(r) => {
                 self.inner.mapper.lock().unwrap().on_turn_start_response(&r);
                 self.inner.turn_progress.notify_waiters();
@@ -610,7 +701,9 @@ impl ProviderSessionHandle for CodexSession {
         };
         let turn_id = turn_id.ok_or_else(|| anyhow::anyhow!("No running Codex turn to steer"))?;
         let params = json!({ "threadId": native, "expectedTurnId": turn_id, "input": [{ "type": "text", "text": text }] });
-        self.inner.request("turn/steer", params, REQUEST_DEADLINE).await?;
+        self.inner
+            .request("turn/steer", params, REQUEST_DEADLINE)
+            .await?;
         Ok(())
     }
 
@@ -627,10 +720,22 @@ impl ProviderSessionHandle for CodexSession {
             }
             anyhow::bail!("Codex did not start the queued turn within 10 seconds");
         }
-        let turn_id = self.inner.mapper.lock().unwrap().turn_of(run_id).and_then(|(id, _)| id);
-        let Some(turn_id) = turn_id else { return Ok(()) };
+        let turn_id = self
+            .inner
+            .mapper
+            .lock()
+            .unwrap()
+            .turn_of(run_id)
+            .and_then(|(id, _)| id);
+        let Some(turn_id) = turn_id else {
+            return Ok(());
+        };
         self.inner
-            .request("turn/interrupt", json!({ "threadId": native, "turnId": turn_id }), SHORT_TIMEOUT)
+            .request(
+                "turn/interrupt",
+                json!({ "threadId": native, "turnId": turn_id }),
+                SHORT_TIMEOUT,
+            )
             .await?;
         // No turn/completed within 10 s: finish it as interrupted ourselves (CA:9212-9218).
         let inner = self.inner.clone();
@@ -639,7 +744,12 @@ impl ProviderSessionHandle for CodexSession {
             tokio::time::sleep(STOP_CONFIRM_TIMEOUT).await;
             let mut m = inner.mapper.lock().unwrap();
             if m.turn_of(&run).is_some() {
-                m.finish(TerminalStatus::Interrupted, None, Some("Codex did not confirm the stop".into()), false);
+                m.finish(
+                    TerminalStatus::Interrupted,
+                    None,
+                    Some("Codex did not confirm the stop".into()),
+                    false,
+                );
             }
         });
         Ok(())
@@ -647,13 +757,18 @@ impl ProviderSessionHandle for CodexSession {
 
     async fn respond(&self, response: RequestResponse) -> anyhow::Result<()> {
         let (id, result) = self.inner.mapper.lock().unwrap().respond(&response)?;
-        self.inner.send_frame(&json!({ "id": id, "result": result }))?;
+        self.inner
+            .send_frame(&json!({ "id": id, "result": result }))?;
         Ok(())
     }
 
     async fn set_model(&self, selection: ModelSelection) -> anyhow::Result<()> {
         // Codex takes model and effort per turn/start; nothing to send now.
-        self.inner.mapper.lock().unwrap().set_model(Some(selection.model));
+        self.inner
+            .mapper
+            .lock()
+            .unwrap()
+            .set_model(Some(selection.model));
         Ok(())
     }
 
@@ -662,7 +777,12 @@ impl ProviderSessionHandle for CodexSession {
         {
             let mut m = self.inner.mapper.lock().unwrap();
             if m.active_run().is_some() {
-                m.finish(TerminalStatus::Interrupted, None, Some("session shut down".into()), false);
+                m.finish(
+                    TerminalStatus::Interrupted,
+                    None,
+                    Some("session shut down".into()),
+                    false,
+                );
             }
         }
         match &self.inner.proc {
@@ -702,15 +822,30 @@ impl Default for CodexAdapter {
     }
 }
 
-fn spawn_app_server(bin: PathBuf, cwd: Option<PathBuf>, env: &HashMap<String, String>) -> anyhow::Result<(Arc<Proc>, tokio::process::ChildStdin, tokio::process::ChildStdout)> {
+fn spawn_app_server(
+    bin: PathBuf,
+    cwd: Option<PathBuf>,
+    env: &HashMap<String, String>,
+) -> anyhow::Result<(
+    Arc<Proc>,
+    tokio::process::ChildStdin,
+    tokio::process::ChildStdout,
+)> {
     // The originator must be set at spawn: app-server refreshes the model catalog
     // before initialize (CP:606).
     let mut env_map: HashMap<String, String> = HashMap::new();
-    env_map.insert("CODEX_INTERNAL_ORIGINATOR_OVERRIDE".into(), CLIENT_NAME.into());
+    env_map.insert(
+        "CODEX_INTERNAL_ORIGINATOR_OVERRIDE".into(),
+        CLIENT_NAME.into(),
+    );
     env_map.extend(env.clone());
     let spec = SpawnSpec {
         program: bin,
-        args: vec!["app-server".into(), "-c".into(), "thread_unload_delay_secs=0".into()],
+        args: vec![
+            "app-server".into(),
+            "-c".into(),
+            "thread_unload_delay_secs=0".into(),
+        ],
         cwd,
         env: env_map,
         env_remove: vec![],
@@ -767,7 +902,9 @@ impl ProviderAdapter for CodexAdapter {
                 status.models = models;
             }
             Ok(Err(e)) => status.message = Some(format!("Codex app-server probe failed: {e}")),
-            Err(_) => status.message = Some("Timed out while checking Codex account status.".into()),
+            Err(_) => {
+                status.message = Some("Timed out while checking Codex account status.".into())
+            }
         }
         status
     }
@@ -777,7 +914,8 @@ impl ProviderAdapter for CodexAdapter {
         config: SessionConfig,
         events: mpsc::UnboundedSender<ProviderEvent>,
     ) -> anyhow::Result<Box<dyn ProviderSessionHandle>> {
-        let bin = find_binary(config.binary_path.as_deref(), "codex").ok_or_else(|| anyhow::anyhow!(not_found_message()))?;
+        let bin = find_binary(config.binary_path.as_deref(), "codex")
+            .ok_or_else(|| anyhow::anyhow!(not_found_message()))?;
         let _ = events.send(ProviderEvent::SessionUpdated {
             status: SessionStatus::Starting,
             model: Some(config.model_selection.model.clone()),
@@ -793,14 +931,20 @@ impl ProviderAdapter for CodexAdapter {
 }
 
 /// Short-lived status process: initialize, account/read, then every model/list page.
-async fn probe_app_server(bin: PathBuf) -> anyhow::Result<(models::AccountStatus, Vec<ProviderModel>)> {
+async fn probe_app_server(
+    bin: PathBuf,
+) -> anyhow::Result<(models::AccountStatus, Vec<ProviderModel>)> {
     let (proc, stdin, stdout) = spawn_app_server(bin, None, &HashMap::new())?;
     let (tx, _rx) = mpsc::unbounded_channel();
     let config = SessionConfig {
         thread_id: String::new(),
         cwd: PathBuf::from("."),
         resume_native_thread_id: None,
-        model_selection: ModelSelection { instance_id: "codex".into(), model: String::new(), options: vec![] },
+        model_selection: ModelSelection {
+            instance_id: "codex".into(),
+            model: String::new(),
+            options: vec![],
+        },
         runtime_mode: RuntimeMode::FullAccess,
         binary_path: None,
         env: HashMap::new(),
@@ -808,7 +952,10 @@ async fn probe_app_server(bin: PathBuf) -> anyhow::Result<(models::AccountStatus
     let session = CodexSession::wire(stdout, stdin, Some(proc.clone()), config, tx);
     let result = async {
         session.handshake(false).await?;
-        let account = session.inner.request("account/read", json!({}), SHORT_TIMEOUT * 3).await?;
+        let account = session
+            .inner
+            .request("account/read", json!({}), SHORT_TIMEOUT * 3)
+            .await?;
         let account = models::map_account(&account);
         let mut models = vec![];
         if account.auth != ProviderAuthState::SignedOut {
@@ -819,8 +966,15 @@ async fn probe_app_server(bin: PathBuf) -> anyhow::Result<(models::AccountStatus
                     Some(c) => json!({ "cursor": c }),
                     None => json!({}),
                 };
-                let page = session.inner.request("model/list", params, SHORT_TIMEOUT * 3).await?;
-                cursor = page.get("nextCursor").and_then(Value::as_str).filter(|c| !c.is_empty()).map(str::to_string);
+                let page = session
+                    .inner
+                    .request("model/list", params, SHORT_TIMEOUT * 3)
+                    .await?;
+                cursor = page
+                    .get("nextCursor")
+                    .and_then(Value::as_str)
+                    .filter(|c| !c.is_empty())
+                    .map(str::to_string);
                 pages.push(page);
                 if cursor.is_none() {
                     break;
@@ -840,12 +994,20 @@ async fn probe_app_server(bin: PathBuf) -> anyhow::Result<(models::AccountStatus
 mod tests {
     use super::*;
 
-    fn turn(mode: RuntimeMode, interaction: InteractionMode, options: Vec<OptionSelection>) -> TurnRequest {
+    fn turn(
+        mode: RuntimeMode,
+        interaction: InteractionMode,
+        options: Vec<OptionSelection>,
+    ) -> TurnRequest {
         TurnRequest {
             run_id: "r".into(),
             text: "hi".into(),
             attachments: vec![],
-            model_selection: ModelSelection { instance_id: "codex".into(), model: "gpt-6-luna".into(), options },
+            model_selection: ModelSelection {
+                instance_id: "codex".into(),
+                model: "gpt-6-luna".into(),
+                options,
+            },
             runtime_mode: mode,
             interaction_mode: interaction,
             cwd: "/w".into(),
@@ -855,24 +1017,55 @@ mod tests {
     #[test]
     fn runtime_modes_map_to_policies() {
         let input = vec![json!({"type": "text", "text": "hi"})];
-        let p = CodexSession::turn_start_params("t", &turn(RuntimeMode::ApprovalRequired, InteractionMode::Default, vec![]), input.clone(), "auto");
+        let p = CodexSession::turn_start_params(
+            "t",
+            &turn(
+                RuntimeMode::ApprovalRequired,
+                InteractionMode::Default,
+                vec![],
+            ),
+            input.clone(),
+            "auto",
+        );
         assert_eq!(p["approvalPolicy"], json!("untrusted"));
         assert_eq!(p["sandboxPolicy"], json!({"type": "readOnly"}));
         assert_eq!(p["approvalsReviewer"], json!("user"));
-        let p = CodexSession::turn_start_params("t", &turn(RuntimeMode::Auto, InteractionMode::Plan, vec![]), input.clone(), "auto");
+        let p = CodexSession::turn_start_params(
+            "t",
+            &turn(RuntimeMode::Auto, InteractionMode::Plan, vec![]),
+            input.clone(),
+            "auto",
+        );
         assert_eq!(p["approvalsReviewer"], json!("auto_review"));
         assert_eq!(p["sandboxPolicy"], json!({"type": "workspaceWrite"}));
         assert_eq!(p["collaborationMode"]["mode"], json!("plan"));
         assert!(p.get("effort").is_none());
         let opts = vec![
-            OptionSelection { id: "reasoningEffort".into(), value: OptionValue::Str("low".into()) },
-            OptionSelection { id: "serviceTier".into(), value: OptionValue::Str("default".into()) },
+            OptionSelection {
+                id: "reasoningEffort".into(),
+                value: OptionValue::Str("low".into()),
+            },
+            OptionSelection {
+                id: "serviceTier".into(),
+                value: OptionValue::Str("default".into()),
+            },
         ];
-        let p = CodexSession::turn_start_params("t", &turn(RuntimeMode::FullAccess, InteractionMode::Default, opts), input, "concise");
-        assert_eq!(p["approvalPolicy"]["granular"]["mcp_elicitations"], json!(true));
+        let p = CodexSession::turn_start_params(
+            "t",
+            &turn(RuntimeMode::FullAccess, InteractionMode::Default, opts),
+            input,
+            "concise",
+        );
+        assert_eq!(
+            p["approvalPolicy"]["granular"]["mcp_elicitations"],
+            json!(true)
+        );
         assert_eq!(p["sandboxPolicy"], json!({"type": "dangerFullAccess"}));
         assert_eq!(p["effort"], json!("low"));
-        assert_eq!(p["collaborationMode"]["settings"]["reasoning_effort"], json!("low"));
+        assert_eq!(
+            p["collaborationMode"]["settings"]["reasoning_effort"],
+            json!("low")
+        );
         assert_eq!(p["summary"], json!("concise"));
         assert!(p.get("serviceTier").is_none());
     }

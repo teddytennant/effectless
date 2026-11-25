@@ -29,7 +29,9 @@ use self::mapper::ClaudeMapper;
 use self::models::CompiledSelection;
 use crate::discovery::{VersionProbe, find_binary, probe_version};
 use crate::process::{Frame, Proc, SpawnSpec, read_frame};
-use crate::util::{Emitter, is_native_image, mime_of, read_base64, str_of, text_with_attachment_paths};
+use crate::util::{
+    Emitter, is_native_image, mime_of, read_base64, str_of, text_with_attachment_paths,
+};
 use crate::{ProviderAdapter, ProviderSessionHandle, RequestResponse, SessionConfig, TurnRequest};
 
 /// `initialize` deadline (A:387).
@@ -90,17 +92,28 @@ pub struct Policy {
 }
 
 impl Policy {
-    pub fn new(sel: &CompiledSelection, runtime: RuntimeMode, interaction: InteractionMode) -> Self {
+    pub fn new(
+        sel: &CompiledSelection,
+        runtime: RuntimeMode,
+        interaction: InteractionMode,
+    ) -> Self {
         let mut settings = Map::new();
         settings.insert("showThinkingSummaries".into(), json!(true));
         settings.extend(sel.settings.clone());
-        Self { permission_mode: permission_mode(runtime, interaction), model: sel.api_model.clone(), effort: sel.effort.clone(), settings }
+        Self {
+            permission_mode: permission_mode(runtime, interaction),
+            model: sel.api_model.clone(),
+            effort: sel.effort.clone(),
+            settings,
+        }
     }
 
     /// Model, effort, fast mode and ultracode switch live; the rest needs a respawn (A:2358-2378).
     fn live_switchable_from(&self, old: &Policy) -> bool {
         let thinking = |p: &Policy| p.settings.get("alwaysThinkingEnabled").cloned();
-        self.permission_mode == old.permission_mode && thinking(self) == thinking(old) && (self.effort.is_some() || old.effort.is_none())
+        self.permission_mode == old.permission_mode
+            && thinking(self) == thinking(old)
+            && (self.effort.is_some() || old.effort.is_none())
     }
 }
 
@@ -131,7 +144,12 @@ pub fn build_args(policy: &Policy, session: &SessionArg) -> Vec<String> {
     .iter()
     .map(|s| s.to_string())
     .collect();
-    a.extend(["--model".into(), policy.model.clone(), "--permission-mode".into(), policy.permission_mode.into()]);
+    a.extend([
+        "--model".into(),
+        policy.model.clone(),
+        "--permission-mode".into(),
+        policy.permission_mode.into(),
+    ]);
     if policy.permission_mode == "bypassPermissions" {
         a.push("--allow-dangerously-skip-permissions".into());
     }
@@ -142,19 +160,31 @@ pub fn build_args(policy: &Policy, session: &SessionArg) -> Vec<String> {
     if let Some(e) = &policy.effort {
         a.extend(["--effort".into(), e.clone()]);
     }
-    a.extend(["--settings".into(), Value::Object(policy.settings.clone()).to_string()]);
+    a.extend([
+        "--settings".into(),
+        Value::Object(policy.settings.clone()).to_string(),
+    ]);
     a
 }
 
 /// The stdin line for a prompt (§4.2.1).
-pub fn user_message(text: &str, attachments: &[(ChatAttachment, PathBuf)], prefix: Option<&str>, uuid: &str, steer: bool) -> anyhow::Result<Value> {
+pub fn user_message(
+    text: &str,
+    attachments: &[(ChatAttachment, PathBuf)],
+    prefix: Option<&str>,
+    uuid: &str,
+    steer: bool,
+) -> anyhow::Result<Value> {
     let mut text = text_with_attachment_paths(text, attachments);
-    if let Some(p) = prefix {
-        if !text.starts_with('/') {
-            text = format!("{p}{text}");
-        }
+    if let Some(p) = prefix
+        && !text.starts_with('/')
+    {
+        text = format!("{p}{text}");
     }
-    let images: Vec<&(ChatAttachment, PathBuf)> = attachments.iter().filter(|(a, _)| is_native_image(a)).collect();
+    let images: Vec<&(ChatAttachment, PathBuf)> = attachments
+        .iter()
+        .filter(|(a, _)| is_native_image(a))
+        .collect();
     let content = if images.is_empty() {
         json!(text)
     } else {
@@ -172,7 +202,10 @@ pub fn user_message(text: &str, attachments: &[(ChatAttachment, PathBuf)], prefi
     Ok(msg)
 }
 
-type Io = (Box<dyn AsyncRead + Unpin + Send>, Box<dyn AsyncWrite + Unpin + Send>);
+type Io = (
+    Box<dyn AsyncRead + Unpin + Send>,
+    Box<dyn AsyncWrite + Unpin + Send>,
+);
 
 struct Conn {
     generation: u64,
@@ -204,7 +237,8 @@ impl Inner {
     fn write(&self, frame: &Value) -> anyhow::Result<()> {
         let out = self.out.lock().unwrap().clone();
         let (_, tx) = out.ok_or_else(|| anyhow::anyhow!("Claude is not running"))?;
-        tx.send(frame.to_string()).map_err(|_| anyhow::anyhow!("Claude's stdin is closed"))
+        tx.send(frame.to_string())
+            .map_err(|_| anyhow::anyhow!("Claude's stdin is closed"))
     }
 
     /// Drops the shared stdin sender so the writer can close stdin.
@@ -226,11 +260,20 @@ impl Inner {
         }
         match tokio::time::timeout(timeout, rx).await {
             Ok(Ok(Ok(v))) => Ok(v),
-            Ok(Ok(Err(e))) => Err(anyhow::anyhow!("Claude rejected {}: {e}", request["subtype"])),
-            Ok(Err(_)) => Err(anyhow::anyhow!("Claude exited before answering {}", request["subtype"])),
+            Ok(Ok(Err(e))) => Err(anyhow::anyhow!(
+                "Claude rejected {}: {e}",
+                request["subtype"]
+            )),
+            Ok(Err(_)) => Err(anyhow::anyhow!(
+                "Claude exited before answering {}",
+                request["subtype"]
+            )),
             Err(_) => {
                 self.pending_ctrl.lock().unwrap().remove(&id);
-                Err(anyhow::anyhow!("Claude did not answer {} in time", request["subtype"]))
+                Err(anyhow::anyhow!(
+                    "Claude did not answer {} in time",
+                    request["subtype"]
+                ))
             }
         }
     }
@@ -241,25 +284,30 @@ impl Inner {
         }
     }
 
-    fn handle_line(&self, line: &str, out: &mpsc::WeakUnboundedSender<String>) -> Result<(), String> {
+    fn handle_line(
+        &self,
+        line: &str,
+        out: &mpsc::WeakUnboundedSender<String>,
+    ) -> Result<(), String> {
         if line.trim().is_empty() {
             return Ok(());
         }
-        let frame: Value = serde_json::from_str(line).map_err(|e| format!("malformed line from Claude: {e}"))?;
+        let frame: Value =
+            serde_json::from_str(line).map_err(|e| format!("malformed line from Claude: {e}"))?;
         if !frame.is_object() {
             return Err("malformed line from Claude: not an object".into());
         }
         if str_of(&frame, "type") == Some("control_response") {
             let resp = frame.get("response").cloned().unwrap_or(Value::Null);
-            if let Some(id) = str_of(&resp, "request_id") {
-                if let Some(tx) = self.pending_ctrl.lock().unwrap().remove(id) {
-                    let r = if str_of(&resp, "subtype") == Some("error") {
-                        Err(str_of(&resp, "error").unwrap_or("error").to_string())
-                    } else {
-                        Ok(resp.get("response").cloned().unwrap_or(Value::Null))
-                    };
-                    let _ = tx.send(r);
-                }
+            if let Some(id) = str_of(&resp, "request_id")
+                && let Some(tx) = self.pending_ctrl.lock().unwrap().remove(id)
+            {
+                let r = if str_of(&resp, "subtype") == Some("error") {
+                    Err(str_of(&resp, "error").unwrap_or("error").to_string())
+                } else {
+                    Ok(resp.get("response").cloned().unwrap_or(Value::Null))
+                };
+                let _ = tx.send(r);
             }
             return Ok(());
         }
@@ -281,7 +329,13 @@ impl Inner {
     }
 
     /// Wires reader and writer tasks for one CLI process.
-    fn attach(self: &Arc<Self>, reader: Box<dyn AsyncRead + Unpin + Send>, mut writer: Box<dyn AsyncWrite + Unpin + Send>, proc: Option<Arc<Proc>>, policy: Policy) -> Conn {
+    fn attach(
+        self: &Arc<Self>,
+        reader: Box<dyn AsyncRead + Unpin + Send>,
+        mut writer: Box<dyn AsyncWrite + Unpin + Send>,
+        proc: Option<Arc<Proc>>,
+        policy: Policy,
+    ) -> Conn {
         let generation = self.generation.fetch_add(1, Ordering::SeqCst) + 1;
         let (out_tx, mut out_rx) = mpsc::unbounded_channel::<String>();
         let alive = Arc::new(AtomicBool::new(true));
@@ -367,12 +421,23 @@ impl Inner {
                 if !expected {
                     tracing::warn!(thread = %inner.config.thread_id, "{message}");
                 }
-                inner.mapper.lock().unwrap().process_gone(&message, expected);
+                inner
+                    .mapper
+                    .lock()
+                    .unwrap()
+                    .process_gone(&message, expected);
             }
             inner.turn_done.notify_waiters();
         });
 
-        Conn { generation, out: out_tx, proc, policy, alive, expected_exit }
+        Conn {
+            generation,
+            out: out_tx,
+            proc,
+            policy,
+            alive,
+            expected_exit,
+        }
     }
 
     fn spawn_env(&self, resuming: bool) -> (HashMap<String, String>, Vec<String>) {
@@ -393,17 +458,37 @@ impl Inner {
                 (m.session_id.clone().unwrap_or_default(), m.has_turns)
             };
             let resuming = self.resumable.load(Ordering::SeqCst) || has_turns;
-            let session = if resuming { SessionArg::Resume(sid.clone()) } else { SessionArg::New(sid.clone()) };
+            let session = if resuming {
+                SessionArg::Resume(sid.clone())
+            } else {
+                SessionArg::New(sid.clone())
+            };
             let conn = if let Some((r, w)) = self.test_io.lock().unwrap().take() {
                 self.attach(r, w, None, policy.clone())
             } else {
-                let bin = self.bin.clone().ok_or_else(|| anyhow::anyhow!("Claude Code CLI (`claude`) was not found on PATH."))?;
+                let bin = self.bin.clone().ok_or_else(|| {
+                    anyhow::anyhow!("Claude Code CLI (`claude`) was not found on PATH.")
+                })?;
                 let (env, env_remove) = self.spawn_env(resuming);
-                let spec = SpawnSpec { program: bin, args: build_args(policy, &session), cwd: Some(self.config.cwd.clone()), env, env_remove };
+                let spec = SpawnSpec {
+                    program: bin,
+                    args: build_args(policy, &session),
+                    cwd: Some(self.config.cwd.clone()),
+                    env,
+                    env_remove,
+                };
                 let (proc, stdin, stdout) = Proc::spawn(&spec)?;
-                self.attach(Box::new(stdout), Box::new(stdin), Some(proc), policy.clone())
+                self.attach(
+                    Box::new(stdout),
+                    Box::new(stdin),
+                    Some(proc),
+                    policy.clone(),
+                )
             };
-            match self.control(json!({ "subtype": "initialize" }), INITIALIZE_TIMEOUT).await {
+            match self
+                .control(json!({ "subtype": "initialize" }), INITIALIZE_TIMEOUT)
+                .await
+            {
                 Ok(init) => {
                     if let Some(m) = init.get("models").and_then(Value::as_array) {
                         tracing::debug!(count = m.len(), "claude initialize");
@@ -411,13 +496,20 @@ impl Inner {
                     return Ok(conn);
                 }
                 Err(e) => {
-                    let stderr = conn.proc.as_ref().map(|p| p.stderr_tail()).unwrap_or_default();
+                    let stderr = conn
+                        .proc
+                        .as_ref()
+                        .map(|p| p.stderr_tail())
+                        .unwrap_or_default();
                     conn.expected_exit.store(true, Ordering::SeqCst);
                     if let Some(p) = &conn.proc {
                         p.kill();
                     }
                     // The stored session is gone: start a fresh one (A:1945-1953).
-                    if attempt == 0 && resuming && stderr.contains("No conversation found with session ID") {
+                    if attempt == 0
+                        && resuming
+                        && stderr.contains("No conversation found with session ID")
+                    {
                         let fresh = uuid::Uuid::new_v4().to_string();
                         self.resumable.store(false, Ordering::SeqCst);
                         let mut m = self.mapper.lock().unwrap();
@@ -474,10 +566,10 @@ impl Inner {
             old.expected_exit.store(true, Ordering::SeqCst);
             self.release_out(old.generation);
             drop(old.out);
-            if let Some(p) = &old.proc {
-                if p.wait_exit(EXIT_GRACE).await.is_none() {
-                    p.terminate(Duration::from_secs(2)).await;
-                }
+            if let Some(p) = &old.proc
+                && p.wait_exit(EXIT_GRACE).await.is_none()
+            {
+                p.terminate(Duration::from_secs(2)).await;
             }
         }
         let conn = self.connect(&policy).await?;
@@ -491,7 +583,12 @@ pub struct ClaudeSession {
 }
 
 impl ClaudeSession {
-    fn build(config: SessionConfig, bin: Option<PathBuf>, test_io: Option<Io>, events: mpsc::UnboundedSender<ProviderEvent>) -> Self {
+    fn build(
+        config: SessionConfig,
+        bin: Option<PathBuf>,
+        test_io: Option<Io>,
+        events: mpsc::UnboundedSender<ProviderEvent>,
+    ) -> Self {
         let live_session_id = new_id();
         let mut mapper = ClaudeMapper::new(&config.thread_id, &live_session_id, Emitter(events));
         let (sid, resumable) = match &config.resume_native_thread_id {
@@ -522,41 +619,70 @@ impl ClaudeSession {
 
     /// A session over one pre-connected transport instead of a spawned CLI. Replay tests
     /// use it; a respawn (policy change, interrupt fallback) fails.
-    pub fn over_io<R, W>(reader: R, writer: W, config: SessionConfig, events: mpsc::UnboundedSender<ProviderEvent>) -> Self
+    pub fn over_io<R, W>(
+        reader: R,
+        writer: W,
+        config: SessionConfig,
+        events: mpsc::UnboundedSender<ProviderEvent>,
+    ) -> Self
     where
         R: AsyncRead + Unpin + Send + 'static,
         W: AsyncWrite + Unpin + Send + 'static,
     {
-        Self::build(config, None, Some((Box::new(reader), Box::new(writer))), events)
+        Self::build(
+            config,
+            None,
+            Some((Box::new(reader), Box::new(writer))),
+            events,
+        )
     }
 
     /// Spawns the CLI now so startup errors surface at open (§4.1.6).
     pub async fn start(&self) -> anyhow::Result<()> {
         let sel = models::compile(&self.inner.config.model_selection);
-        let policy = Policy::new(&sel, self.inner.config.runtime_mode, InteractionMode::Default);
+        let policy = Policy::new(
+            &sel,
+            self.inner.config.runtime_mode,
+            InteractionMode::Default,
+        );
         self.inner.ensure(policy).await?;
         let (sid, model) = {
             let m = self.inner.mapper.lock().unwrap();
             (m.session_id.clone(), m.model.clone())
         };
         let em = self.inner.mapper.lock().unwrap().emitter().clone();
-        em.send(ProviderEvent::BindingUpdated { native_thread_id: sid, status: ProviderThreadStatus::Idle, context_usage: None });
-        em.send(ProviderEvent::SessionUpdated { status: SessionStatus::Ready, model, startup_phase: None, last_error: None });
+        em.send(ProviderEvent::BindingUpdated {
+            native_thread_id: sid,
+            status: ProviderThreadStatus::Idle,
+            context_usage: None,
+        });
+        em.send(ProviderEvent::SessionUpdated {
+            status: SessionStatus::Ready,
+            model,
+            startup_phase: None,
+            last_error: None,
+        });
         Ok(())
     }
 
     /// The native session id: allocated here, or adopted from `system/init`.
     pub fn session_id(&self) -> String {
-        self.inner.mapper.lock().unwrap().session_id.clone().unwrap_or_default()
+        self.inner
+            .mapper
+            .lock()
+            .unwrap()
+            .session_id
+            .clone()
+            .unwrap_or_default()
     }
 }
 
 impl Drop for ClaudeSession {
     fn drop(&mut self) {
-        if let Ok(guard) = self.inner.conn.try_lock() {
-            if let Some(p) = guard.as_ref().and_then(|c| c.proc.as_ref()) {
-                p.kill();
-            }
+        if let Ok(guard) = self.inner.conn.try_lock()
+            && let Some(p) = guard.as_ref().and_then(|c| c.proc.as_ref())
+        {
+            p.kill();
         }
     }
 }
@@ -568,7 +694,10 @@ impl ProviderSessionHandle for ClaudeSession {
     }
 
     async fn start_turn(&self, turn: TurnRequest) -> anyhow::Result<()> {
-        anyhow::ensure!(self.inner.mapper.lock().unwrap().active_run().is_none(), "A Claude turn is already running on this thread");
+        anyhow::ensure!(
+            self.inner.mapper.lock().unwrap().active_run().is_none(),
+            "A Claude turn is already running on this thread"
+        );
         let compiled = models::compile(&turn.model_selection);
         let policy = Policy::new(&compiled, turn.runtime_mode, turn.interaction_mode);
         {
@@ -582,8 +711,18 @@ impl ProviderSessionHandle for ClaudeSession {
         *self.inner.selection.lock().unwrap() = turn.model_selection.clone();
         self.inner.ensure(policy).await?;
         let prompt_uuid = uuid::Uuid::new_v4().to_string();
-        let msg = user_message(&turn.text, &turn.attachments, compiled.prompt_prefix, &prompt_uuid, false)?;
-        self.inner.mapper.lock().unwrap().begin_turn(&turn.run_id, &prompt_uuid);
+        let msg = user_message(
+            &turn.text,
+            &turn.attachments,
+            compiled.prompt_prefix,
+            &prompt_uuid,
+            false,
+        )?;
+        self.inner
+            .mapper
+            .lock()
+            .unwrap()
+            .begin_turn(&turn.run_id, &prompt_uuid);
         if let Err(e) = self.inner.write(&msg) {
             // Never reached Claude: no terminal follows an Err.
             self.inner.mapper.lock().unwrap().abort_turn(&turn.run_id);
@@ -593,7 +732,10 @@ impl ProviderSessionHandle for ClaudeSession {
     }
 
     async fn steer(&self, run_id: &str, text: String) -> anyhow::Result<()> {
-        anyhow::ensure!(self.inner.mapper.lock().unwrap().active_run() == Some(run_id), "No running Claude turn to steer");
+        anyhow::ensure!(
+            self.inner.mapper.lock().unwrap().active_run() == Some(run_id),
+            "No running Claude turn to steer"
+        );
         let msg = user_message(&text, &[], None, &uuid::Uuid::new_v4().to_string(), true)?;
         self.inner.write(&msg)?;
         self.inner.mapper.lock().unwrap().note_steer(run_id);
@@ -626,18 +768,36 @@ impl ProviderSessionHandle for ClaudeSession {
                 feedback: None,
                 answers: None,
             };
-            let resp = RequestResponse { request: req, decision: Some(ApprovalDecision::Cancel), feedback: None, answers: None };
-            if let Ok(frame) = self.inner.mapper.lock().unwrap().respond(&resp) {
+            let resp = RequestResponse {
+                request: req,
+                decision: Some(ApprovalDecision::Cancel),
+                feedback: None,
+                answers: None,
+            };
+            let mut m = self.inner.mapper.lock().unwrap();
+            if let Ok(frame) = m.respond(&resp) {
                 let _ = self.inner.write(&frame);
+                m.emitter().send(ProviderEvent::RequestClosed {
+                    request_id: resp.request.id.clone(),
+                    status: RequestStatus::Cancelled,
+                });
             }
         }
-        let sent = self.inner.control(json!({ "subtype": "interrupt" }), CONTROL_TIMEOUT).await;
+        let sent = self
+            .inner
+            .control(json!({ "subtype": "interrupt" }), CONTROL_TIMEOUT)
+            .await;
         // Keep the process warm when the CLI ends the turn itself; otherwise kill it and
         // let the next turn resume (A:14476-14502).
         let inner = self.inner.clone();
         let run = run_id.to_string();
         tokio::spawn(async move {
-            let deadline = tokio::time::Instant::now() + if sent.is_ok() { INTERRUPT_CONFIRM } else { Duration::ZERO };
+            let deadline = tokio::time::Instant::now()
+                + if sent.is_ok() {
+                    INTERRUPT_CONFIRM
+                } else {
+                    Duration::ZERO
+                };
             loop {
                 let notified = inner.turn_done.notified();
                 if inner.mapper.lock().unwrap().active_run() != Some(run.as_str()) {
@@ -654,7 +814,11 @@ impl ProviderSessionHandle for ClaudeSession {
                     Some(p) => p.kill(),
                     None => {
                         drop(guard);
-                        inner.mapper.lock().unwrap().process_gone("Claude did not confirm the stop", true);
+                        inner
+                            .mapper
+                            .lock()
+                            .unwrap()
+                            .process_gone("Claude did not confirm the stop", true);
                     }
                 }
             }
@@ -670,12 +834,23 @@ impl ProviderSessionHandle for ClaudeSession {
     async fn set_model(&self, selection: ModelSelection) -> anyhow::Result<()> {
         *self.inner.selection.lock().unwrap() = selection.clone();
         let idle = self.inner.mapper.lock().unwrap().active_run().is_none();
-        let current = self.inner.conn.lock().await.as_ref().filter(|c| c.alive.load(Ordering::SeqCst)).map(|c| c.policy.clone());
+        let current = self
+            .inner
+            .conn
+            .lock()
+            .await
+            .as_ref()
+            .filter(|c| c.alive.load(Ordering::SeqCst))
+            .map(|c| c.policy.clone());
         // Applied live when the process is idle and the change allows it; otherwise the
         // next turn's policy check respawns.
         if let (true, Some(old)) = (idle, current) {
             let compiled = models::compile(&selection);
-            let mut policy = Policy::new(&compiled, self.inner.config.runtime_mode, InteractionMode::Default);
+            let mut policy = Policy::new(
+                &compiled,
+                self.inner.config.runtime_mode,
+                InteractionMode::Default,
+            );
             policy.permission_mode = old.permission_mode;
             if policy.live_switchable_from(&old) {
                 self.inner.ensure(policy).await?;
@@ -688,7 +863,12 @@ impl ProviderSessionHandle for ClaudeSession {
         {
             let mut m = self.inner.mapper.lock().unwrap();
             if m.active_run().is_some() {
-                m.finish(TerminalStatus::Interrupted, None, Some("session shut down".into()), false);
+                m.finish(
+                    TerminalStatus::Interrupted,
+                    None,
+                    Some("session shut down".into()),
+                    false,
+                );
             }
         }
         let conn = self.inner.conn.lock().await.take();
@@ -696,14 +876,19 @@ impl ProviderSessionHandle for ClaudeSession {
         if let Some(c) = conn {
             c.expected_exit.store(true, Ordering::SeqCst);
             drop(c.out);
-            if let Some(p) = &c.proc {
-                if p.wait_exit(EXIT_GRACE).await.is_none() {
-                    p.terminate(Duration::from_secs(2)).await;
-                }
+            if let Some(p) = &c.proc
+                && p.wait_exit(EXIT_GRACE).await.is_none()
+            {
+                p.terminate(Duration::from_secs(2)).await;
             }
         }
         let em = self.inner.mapper.lock().unwrap().emitter().clone();
-        em.send(ProviderEvent::SessionUpdated { status: SessionStatus::Stopped, model: None, startup_phase: None, last_error: None });
+        em.send(ProviderEvent::SessionUpdated {
+            status: SessionStatus::Stopped,
+            model: None,
+            startup_phase: None,
+            last_error: None,
+        });
     }
 
     fn kill(&self) {
@@ -713,14 +898,18 @@ impl ProviderSessionHandle for ClaudeSession {
                 m.mark_interrupting(&run);
             }
         }
-        if let Ok(guard) = self.inner.conn.try_lock() {
-            if let Some(p) = guard.as_ref().and_then(|c| c.proc.as_ref()) {
-                p.kill();
-                return;
-            }
+        if let Ok(guard) = self.inner.conn.try_lock()
+            && let Some(p) = guard.as_ref().and_then(|c| c.proc.as_ref())
+        {
+            p.kill();
+            return;
         }
         // Spawning or test transport: settle synchronously.
-        self.inner.mapper.lock().unwrap().process_gone("Claude was force stopped", false);
+        self.inner
+            .mapper
+            .lock()
+            .unwrap()
+            .process_gone("Claude was force stopped", false);
     }
 }
 
@@ -758,9 +947,15 @@ fn title_case(s: &str) -> String {
 
 /// `formatClaudeSubscriptionAuthLabel` (ClaudeProvider.ts:114-179).
 pub fn subscription_label(subscription: &str) -> String {
-    let norm: String = subscription.to_lowercase().chars().filter(|c| !matches!(c, ' ' | '_' | '-')).collect();
+    let norm: String = subscription
+        .to_lowercase()
+        .chars()
+        .filter(|c| !matches!(c, ' ' | '_' | '-'))
+        .collect();
     let base = match norm.as_str() {
-        "claudemaxsubscription" | "claudemax5xsubscription" | "max" | "maxplan" | "max5" => "Max".to_string(),
+        "claudemaxsubscription" | "claudemax5xsubscription" | "max" | "maxplan" | "max5" => {
+            "Max".to_string()
+        }
         "claudemax20xsubscription" | "max20" => "Ultra".to_string(),
         "claudeenterprisesubscription" | "enterprise" => "Enterprise".to_string(),
         "claudeteamsubscription" | "team" => "Team".to_string(),
@@ -768,7 +963,11 @@ pub fn subscription_label(subscription: &str) -> String {
         "claudefreesubscription" | "free" => "Free".to_string(),
         _ => title_case(subscription),
     };
-    let n: String = base.to_lowercase().chars().filter(|c| !matches!(c, ' ' | '_' | '-')).collect();
+    let n: String = base
+        .to_lowercase()
+        .chars()
+        .filter(|c| !matches!(c, ' ' | '_' | '-'))
+        .collect();
     match (n.starts_with("claude"), n.ends_with("subscription")) {
         (true, true) => base,
         (true, false) => format!("{base} Subscription"),
@@ -781,11 +980,21 @@ pub fn subscription_label(subscription: &str) -> String {
 pub fn map_account(account: &Value) -> (ProviderAuthState, Option<String>) {
     let s = |k: &str| str_of(account, k).filter(|v| !v.is_empty());
     let api_key = s("apiKeySource").is_some_and(|k| k != "none")
-        || matches!(s("tokenSource").map(|t| t.to_lowercase().replace([' ', '_', '-'], "")).as_deref(), Some("apikey" | "anthropicapikey" | "anthropicauthtoken"));
+        || matches!(
+            s("tokenSource")
+                .map(|t| t.to_lowercase().replace([' ', '_', '-'], ""))
+                .as_deref(),
+            Some("apikey" | "anthropicapikey" | "anthropicauthtoken")
+        );
     let provider = s("apiProvider");
     let authed = match provider {
         Some(p) if p != "firstParty" => true,
-        _ => s("tokenSource") != Some("none") || api_key || s("email").is_some() || s("subscriptionType").is_some(),
+        _ => {
+            s("tokenSource") != Some("none")
+                || api_key
+                || s("email").is_some()
+                || s("subscriptionType").is_some()
+        }
     };
     if !authed {
         return (ProviderAuthState::SignedOut, None);
@@ -821,7 +1030,10 @@ async fn probe_account(bin: PathBuf) -> anyhow::Result<Value> {
     .collect();
     let mut env = HashMap::new();
     env.insert("CLAUDE_CODE_ENTRYPOINT".to_string(), "tern".to_string());
-    env.insert("ENABLE_CLAUDEAI_MCP_SERVERS".to_string(), "false".to_string());
+    env.insert(
+        "ENABLE_CLAUDEAI_MCP_SERVERS".to_string(),
+        "false".to_string(),
+    );
     let spec = SpawnSpec {
         program: bin,
         args,
@@ -838,11 +1050,17 @@ async fn probe_account(bin: PathBuf) -> anyhow::Result<Value> {
     let result = loop {
         match read_frame(&mut reader, &mut buf).await {
             Frame::Line(l) => {
-                let Ok(v) = serde_json::from_str::<Value>(&l) else { continue };
+                let Ok(v) = serde_json::from_str::<Value>(&l) else {
+                    continue;
+                };
                 if str_of(&v, "type") == Some("control_response") {
                     let r = &v["response"];
                     if str_of(r, "subtype") == Some("error") {
-                        break Err(anyhow::anyhow!(str_of(r, "error").unwrap_or("initialize failed").to_string()));
+                        break Err(anyhow::anyhow!(
+                            str_of(r, "error")
+                                .unwrap_or("initialize failed")
+                                .to_string()
+                        ));
                     }
                     break Ok(r.get("response").cloned().unwrap_or(Value::Null));
                 }
@@ -896,7 +1114,9 @@ impl ProviderAdapter for ClaudeAdapter {
                 status.version = Some(v);
             }
             VersionProbe::Failed(e) => {
-                status.message = Some(format!("Claude Code CLI is installed but failed to run. {e}"));
+                status.message = Some(format!(
+                    "Claude Code CLI is installed but failed to run. {e}"
+                ));
                 return status;
             }
         }
@@ -907,11 +1127,19 @@ impl ProviderAdapter for ClaudeAdapter {
                 status.auth = auth;
                 status.account_label = label;
                 if auth == ProviderAuthState::SignedOut {
-                    status.message = Some("Claude Code is not authenticated. Run `claude auth login` and try again.".into());
+                    status.message = Some(
+                        "Claude Code is not authenticated. Run `claude auth login` and try again."
+                            .into(),
+                    );
                 }
             }
-            Ok(Err(e)) => status.message = Some(format!("Could not verify Claude authentication: {e}")),
-            Err(_) => status.message = Some("Timed out after 60s while checking Claude account status.".into()),
+            Ok(Err(e)) => {
+                status.message = Some(format!("Could not verify Claude authentication: {e}"))
+            }
+            Err(_) => {
+                status.message =
+                    Some("Timed out after 60s while checking Claude account status.".into())
+            }
         }
         status
     }
@@ -921,7 +1149,8 @@ impl ProviderAdapter for ClaudeAdapter {
         config: SessionConfig,
         events: mpsc::UnboundedSender<ProviderEvent>,
     ) -> anyhow::Result<Box<dyn ProviderSessionHandle>> {
-        let bin = find_binary(config.binary_path.as_deref(), "claude").ok_or_else(|| anyhow::anyhow!(not_found()))?;
+        let bin = find_binary(config.binary_path.as_deref(), "claude")
+            .ok_or_else(|| anyhow::anyhow!(not_found()))?;
         let _ = events.send(ProviderEvent::SessionUpdated {
             status: SessionStatus::Starting,
             model: Some(config.model_selection.model.clone()),
@@ -943,7 +1172,10 @@ mod tests {
         let sel = models::compile(&ModelSelection {
             instance_id: "claudeAgent".into(),
             model: "claude-haiku-5-5".into(),
-            options: vec![OptionSelection { id: "effort".into(), value: OptionValue::Str("low".into()) }],
+            options: vec![OptionSelection {
+                id: "effort".into(),
+                value: OptionValue::Str("low".into()),
+            }],
         });
         let p = Policy::new(&sel, RuntimeMode::FullAccess, InteractionMode::Default);
         let a = build_args(&p, &SessionArg::New("s".into()));
@@ -952,15 +1184,31 @@ mod tests {
         assert!(s.contains("--model claude-haiku-5-5 --permission-mode bypassPermissions --allow-dangerously-skip-permissions --session-id s --effort low"));
         assert!(s.contains("--setting-sources user,project,local"));
         let p = Policy::new(&sel, RuntimeMode::FullAccess, InteractionMode::Plan);
-        assert!(build_args(&p, &SessionArg::Resume("s".into())).join(" ").contains("--permission-mode plan --resume s"));
+        assert!(
+            build_args(&p, &SessionArg::Resume("s".into()))
+                .join(" ")
+                .contains("--permission-mode plan --resume s")
+        );
     }
 
     #[test]
     fn modes_map() {
-        assert_eq!(permission_mode(RuntimeMode::ApprovalRequired, InteractionMode::Default), "default");
-        assert_eq!(permission_mode(RuntimeMode::AutoAcceptEdits, InteractionMode::Default), "acceptEdits");
-        assert_eq!(permission_mode(RuntimeMode::Auto, InteractionMode::Default), "auto");
-        assert_eq!(permission_mode(RuntimeMode::FullAccess, InteractionMode::Plan), "plan");
+        assert_eq!(
+            permission_mode(RuntimeMode::ApprovalRequired, InteractionMode::Default),
+            "default"
+        );
+        assert_eq!(
+            permission_mode(RuntimeMode::AutoAcceptEdits, InteractionMode::Default),
+            "acceptEdits"
+        );
+        assert_eq!(
+            permission_mode(RuntimeMode::Auto, InteractionMode::Default),
+            "auto"
+        );
+        assert_eq!(
+            permission_mode(RuntimeMode::FullAccess, InteractionMode::Plan),
+            "plan"
+        );
     }
 
     #[test]
@@ -976,23 +1224,55 @@ mod tests {
 
     #[test]
     fn accounts() {
-        let (a, l) = map_account(&json!({"email": "x@y.z", "subscriptionType": "Claude Ultra", "apiProvider": "firstParty"}));
-        assert_eq!((a, l.as_deref()), (ProviderAuthState::SignedIn, Some("Claude Ultra Subscription")));
+        let (a, l) = map_account(
+            &json!({"email": "x@y.z", "subscriptionType": "Claude Ultra", "apiProvider": "firstParty"}),
+        );
+        assert_eq!(
+            (a, l.as_deref()),
+            (
+                ProviderAuthState::SignedIn,
+                Some("Claude Ultra Subscription")
+            )
+        );
         let (_, l) = map_account(&json!({"subscriptionType": "max", "tokenSource": "claude.ai"}));
         assert_eq!(l.as_deref(), Some("Claude Max Subscription"));
-        assert_eq!(map_account(&json!({"tokenSource": "none"})).0, ProviderAuthState::SignedOut);
-        assert_eq!(map_account(&json!({"tokenSource": "none", "apiKeySource": "ANTHROPIC_API_KEY"})).1.as_deref(), Some("Claude API Key"));
+        assert_eq!(
+            map_account(&json!({"tokenSource": "none"})).0,
+            ProviderAuthState::SignedOut
+        );
+        assert_eq!(
+            map_account(&json!({"tokenSource": "none", "apiKeySource": "ANTHROPIC_API_KEY"}))
+                .1
+                .as_deref(),
+            Some("Claude API Key")
+        );
     }
 
     #[test]
     fn live_switch_rules() {
-        let c = |effort: Option<&str>| CompiledSelection { api_model: "m".into(), effort: effort.map(str::to_string), ..Default::default() };
-        let a = Policy::new(&c(Some("low")), RuntimeMode::FullAccess, InteractionMode::Default);
-        let b = Policy::new(&c(Some("high")), RuntimeMode::FullAccess, InteractionMode::Default);
+        let c = |effort: Option<&str>| CompiledSelection {
+            api_model: "m".into(),
+            effort: effort.map(str::to_string),
+            ..Default::default()
+        };
+        let a = Policy::new(
+            &c(Some("low")),
+            RuntimeMode::FullAccess,
+            InteractionMode::Default,
+        );
+        let b = Policy::new(
+            &c(Some("high")),
+            RuntimeMode::FullAccess,
+            InteractionMode::Default,
+        );
         assert!(b.live_switchable_from(&a));
         let none = Policy::new(&c(None), RuntimeMode::FullAccess, InteractionMode::Default);
         assert!(!none.live_switchable_from(&a));
-        let plan = Policy::new(&c(Some("low")), RuntimeMode::FullAccess, InteractionMode::Plan);
+        let plan = Policy::new(
+            &c(Some("low")),
+            RuntimeMode::FullAccess,
+            InteractionMode::Plan,
+        );
         assert!(!plan.live_switchable_from(&a));
     }
 }

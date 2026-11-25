@@ -134,7 +134,11 @@ async fn drain_stderr(mut stderr: impl AsyncRead + Unpin, tail: Arc<Mutex<String
                 t.push_str(&String::from_utf8_lossy(&buf[..n]));
                 let len = t.chars().count();
                 if len > STDERR_TAIL_CHARS {
-                    let cut = t.char_indices().nth(len - STDERR_TAIL_CHARS).map(|(i, _)| i).unwrap_or(0);
+                    let cut = t
+                        .char_indices()
+                        .nth(len - STDERR_TAIL_CHARS)
+                        .map(|(i, _)| i)
+                        .unwrap_or(0);
                     t.drain(..cut);
                 }
             }
@@ -166,21 +170,37 @@ fn strip_ansi(s: &str) -> String {
 /// brings the two lines before it. At most 512 chars.
 pub(crate) fn stderr_excerpt(tail: &str) -> Option<String> {
     let clean = strip_ansi(tail);
-    let lines: Vec<&str> = clean.lines().map(str::trim).filter(|l| !l.is_empty()).collect();
+    let lines: Vec<&str> = clean
+        .lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty())
+        .collect();
     let last = *lines.last()?;
     let is_error_line = |l: &str| {
         let lower = l.to_ascii_lowercase();
-        let head: String = lower.chars().take_while(|c| c.is_ascii_alphabetic()).collect();
+        let head: String = lower
+            .chars()
+            .take_while(|c| c.is_ascii_alphabetic())
+            .collect();
         let rest = &lower[head.len()..];
         let rest = rest.trim_start_matches(' ');
-        let rest = if rest.starts_with('[') { rest.split_once(']').map(|x| x.1).unwrap_or(rest) } else { rest };
-        ((head.ends_with("error")) || head == "fatal") && rest.starts_with(':') && rest[1..].trim().len() > 0
+        let rest = if rest.starts_with('[') {
+            rest.split_once(']').map(|x| x.1).unwrap_or(rest)
+        } else {
+            rest
+        };
+        ((head.ends_with("error")) || head == "fatal")
+            && rest.starts_with(':')
+            && !rest[1..].trim().is_empty()
     };
     let pick = if let Some(l) = lines.iter().rev().find(|l| is_error_line(l)) {
         l.to_string()
     } else {
         let lower = last.to_ascii_lowercase();
-        if lower.contains("exit status") || lower.contains("exit code") || lower.contains("exited with code") {
+        if lower.contains("exit status")
+            || lower.contains("exit code")
+            || lower.contains("exited with code")
+        {
             let start = lines.len().saturating_sub(3);
             lines[start..].join(" | ")
         } else {
@@ -199,7 +219,10 @@ pub(crate) enum Frame {
 
 /// Reads one `\n`-terminated line (trailing `\r` stripped). A final unterminated line
 /// at EOF is still returned (proto:487-493).
-pub(crate) async fn read_frame<R: AsyncBufRead + Unpin>(reader: &mut R, buf: &mut Vec<u8>) -> Frame {
+pub(crate) async fn read_frame<R: AsyncBufRead + Unpin>(
+    reader: &mut R,
+    buf: &mut Vec<u8>,
+) -> Frame {
     buf.clear();
     loop {
         let available = match reader.fill_buf().await {
@@ -242,9 +265,15 @@ mod tests {
         let tail = "starting\nERROR codex: boom\nmore noise\n";
         assert_eq!(stderr_excerpt(tail).as_deref(), Some("more noise"));
         let tail = "starting\nerror: boom happened\nmore noise\n";
-        assert_eq!(stderr_excerpt(tail).as_deref(), Some("error: boom happened"));
+        assert_eq!(
+            stderr_excerpt(tail).as_deref(),
+            Some("error: boom happened")
+        );
         let tail = "a\nb\nc\nprocess exited with code 1\n";
-        assert_eq!(stderr_excerpt(tail).as_deref(), Some("b | c | process exited with code 1"));
+        assert_eq!(
+            stderr_excerpt(tail).as_deref(),
+            Some("b | c | process exited with code 1")
+        );
         assert_eq!(stderr_excerpt("\n\n"), None);
     }
 

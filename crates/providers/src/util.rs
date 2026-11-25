@@ -21,12 +21,24 @@ const B64: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz012
 pub(crate) fn base64(bytes: &[u8]) -> String {
     let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
     for chunk in bytes.chunks(3) {
-        let b = [chunk[0], *chunk.get(1).unwrap_or(&0), *chunk.get(2).unwrap_or(&0)];
+        let b = [
+            chunk[0],
+            *chunk.get(1).unwrap_or(&0),
+            *chunk.get(2).unwrap_or(&0),
+        ];
         let n = (u32::from(b[0]) << 16) | (u32::from(b[1]) << 8) | u32::from(b[2]);
         out.push(B64[(n >> 18) as usize & 63] as char);
         out.push(B64[(n >> 12) as usize & 63] as char);
-        out.push(if chunk.len() > 1 { B64[(n >> 6) as usize & 63] as char } else { '=' });
-        out.push(if chunk.len() > 2 { B64[n as usize & 63] as char } else { '=' });
+        out.push(if chunk.len() > 1 {
+            B64[(n >> 6) as usize & 63] as char
+        } else {
+            '='
+        });
+        out.push(if chunk.len() > 2 {
+            B64[n as usize & 63] as char
+        } else {
+            '='
+        });
     }
     out
 }
@@ -39,14 +51,21 @@ pub(crate) fn is_native_image(att: &ChatAttachment) -> bool {
 
 /// `providerMessageTextWithAttachmentPaths` (packages/provider-core/src/server/attachmentPrompt.ts:160):
 /// every attachment's saved path is appended so the agent can open it itself.
-pub(crate) fn text_with_attachment_paths(text: &str, attachments: &[(ChatAttachment, std::path::PathBuf)]) -> String {
+pub(crate) fn text_with_attachment_paths(
+    text: &str,
+    attachments: &[(ChatAttachment, std::path::PathBuf)],
+) -> String {
     let mut out = text.to_string();
     for (att, path) in attachments {
         let kind = match att {
             ChatAttachment::Image { .. } => "image",
             ChatAttachment::File { .. } => "file",
         };
-        let line = format!("[Attached {kind} \"{}\" is saved at: {}]", att.name(), path.display());
+        let line = format!(
+            "[Attached {kind} \"{}\" is saved at: {}]",
+            att.name(),
+            path.display()
+        );
         if out.is_empty() {
             out = line;
         } else {
@@ -59,7 +78,9 @@ pub(crate) fn text_with_attachment_paths(text: &str, attachments: &[(ChatAttachm
 
 pub(crate) fn mime_of(att: &ChatAttachment) -> &str {
     match att {
-        ChatAttachment::Image { mime_type, .. } | ChatAttachment::File { mime_type, .. } => mime_type,
+        ChatAttachment::Image { mime_type, .. } | ChatAttachment::File { mime_type, .. } => {
+            mime_type
+        }
     }
 }
 
@@ -70,7 +91,13 @@ pub(crate) fn read_base64(path: &Path) -> anyhow::Result<String> {
 }
 
 pub(crate) fn failure(class: FailureClass, message: impl Into<String>) -> ProviderFailure {
-    ProviderFailure { class, message: message.into(), code: None, retryable: None, reset_at: None }
+    ProviderFailure {
+        class,
+        message: message.into(),
+        code: None,
+        retryable: None,
+        reset_at: None,
+    }
 }
 
 /// Cuts to at most `max` chars, appending `…` when it did.
@@ -88,12 +115,16 @@ pub(crate) fn str_of<'a>(v: &'a Value, key: &str) -> Option<&'a str> {
 }
 
 pub(crate) fn u64_of(v: &Value, key: &str) -> Option<u64> {
-    v.get(key).and_then(|x| x.as_u64().or_else(|| x.as_f64().filter(|f| *f >= 0.0).map(|f| f as u64)))
+    v.get(key).and_then(|x| {
+        x.as_u64()
+            .or_else(|| x.as_f64().filter(|f| *f >= 0.0).map(|f| f as u64))
+    })
 }
 
 /// Epoch seconds to an RFC 3339 string.
 pub(crate) fn epoch_to_iso(secs: i64) -> Option<String> {
-    chrono::DateTime::from_timestamp(secs, 0).map(|t| t.to_rfc3339_opts(chrono::SecondsFormat::Secs, true))
+    chrono::DateTime::from_timestamp(secs, 0)
+        .map(|t| t.to_rfc3339_opts(chrono::SecondsFormat::Secs, true))
 }
 
 /// `+`/`-` line counts of a unified diff, ignoring the `---`/`+++` headers.
@@ -118,8 +149,17 @@ pub(crate) fn replacement_diff(path: &str, old: &str, new: &str) -> String {
     let a: Vec<&str> = old.lines().collect();
     let b: Vec<&str> = new.lines().collect();
     let prefix = a.iter().zip(&b).take_while(|(x, y)| x == y).count();
-    let suffix = a[prefix..].iter().rev().zip(b[prefix..].iter().rev()).take_while(|(x, y)| x == y).count();
-    let mut out = format!("--- a/{path}\n+++ b/{path}\n@@ -1,{} +1,{} @@\n", a.len(), b.len());
+    let suffix = a[prefix..]
+        .iter()
+        .rev()
+        .zip(b[prefix..].iter().rev())
+        .take_while(|(x, y)| x == y)
+        .count();
+    let mut out = format!(
+        "--- a/{path}\n+++ b/{path}\n@@ -1,{} +1,{} @@\n",
+        a.len(),
+        b.len()
+    );
     for l in &a[..prefix] {
         out.push_str(&format!(" {l}\n"));
     }
@@ -177,7 +217,10 @@ mod tests {
             size_bytes: 3,
         };
         let text = text_with_attachment_paths("hi", &[(att, "/s/a".into())]);
-        assert_eq!(text, "hi\n\n[Attached file \"notes.txt\" is saved at: /s/a]");
+        assert_eq!(
+            text,
+            "hi\n\n[Attached file \"notes.txt\" is saved at: /s/a]"
+        );
     }
 
     #[test]
@@ -196,7 +239,10 @@ mod tests {
     #[test]
     fn answers_normalize() {
         assert_eq!(answer_strings(&serde_json::json!(["a", 1])), vec!["a", "1"]);
-        assert_eq!(answer_strings(&serde_json::json!({"answers": ["x"]})), vec!["x"]);
+        assert_eq!(
+            answer_strings(&serde_json::json!({"answers": ["x"]})),
+            vec!["x"]
+        );
         assert_eq!(answer_strings(&serde_json::json!("y")), vec!["y"]);
     }
 }

@@ -93,20 +93,31 @@ struct ClaudeCodeAdapter {
 
 fn manifest() -> &'static Manifest {
     static M: OnceLock<Manifest> = OnceLock::new();
-    M.get_or_init(|| serde_json::from_str(include_str!("models.json")).expect("bundled claude manifest parses"))
+    M.get_or_init(|| {
+        serde_json::from_str(include_str!("models.json")).expect("bundled claude manifest parses")
+    })
 }
 
 fn min_version(m: &ManifestModel) -> Option<&str> {
-    m.adapter.as_ref()?.get("claudeCode")?.get("minVersion")?.as_str()
+    m.adapter
+        .as_ref()?
+        .get("claudeCode")?
+        .get("minVersion")?
+        .as_str()
 }
 
 fn find_model(slug: &str) -> Option<&'static ManifestModel> {
     let m = manifest();
-    m.models.iter().find(|x| x.slug == slug || x.aliases.iter().any(|a| a == slug))
+    m.models
+        .iter()
+        .find(|x| x.slug == slug || x.aliases.iter().any(|a| a == slug))
 }
 
 fn adapter_of(profile: &Profile) -> Option<&ClaudeCodeAdapter> {
-    profile.adapter.as_ref().and_then(|a| a.claude_code.as_ref())
+    profile
+        .adapter
+        .as_ref()
+        .and_then(|a| a.claude_code.as_ref())
 }
 
 /// `Claude Opus 5.5` -> `Opus 5.5`.
@@ -193,10 +204,18 @@ pub fn compile(sel: &ModelSelection) -> CompiledSelection {
             .find(|o| o.is_default)
             .map(|o| o.id.clone())
     };
-    let mut out = CompiledSelection { api_model: model.map(|m| m.slug.clone()).unwrap_or_else(|| sel.model.clone()), ..Default::default() };
+    let mut out = CompiledSelection {
+        api_model: model
+            .map(|m| m.slug.clone())
+            .unwrap_or_else(|| sel.model.clone()),
+        ..Default::default()
+    };
 
     // Context window: picks a model suffix (`[1m]`) and the meter's max.
-    let window = sel.option_str("contextWindow").map(str::to_string).or_else(|| default_of("contextWindow"));
+    let window = sel
+        .option_str("contextWindow")
+        .map(str::to_string)
+        .or_else(|| default_of("contextWindow"));
     if let (Some(a), Some(w)) = (adapter, &window) {
         if let Some(suffix) = a.model_suffixes.get("contextWindow").and_then(|m| m.get(w)) {
             out.api_model.push_str(suffix);
@@ -225,14 +244,20 @@ pub fn compile(sel: &ModelSelection) -> CompiledSelection {
         out.settings.insert("fastMode".into(), json!(b));
     }
     if let Some(OptionValue::Bool(b)) = sel.option("thinking") {
-        out.settings.insert("alwaysThinkingEnabled".into(), json!(b));
+        out.settings
+            .insert("alwaysThinkingEnabled".into(), json!(b));
     }
     out
 }
 
 /// Context window for the usage meter when the CLI doesn't report one.
 pub fn context_window(slug: &str) -> Option<u64> {
-    compile(&ModelSelection { instance_id: "claudeAgent".into(), model: slug.into(), options: vec![] }).context_window
+    compile(&ModelSelection {
+        instance_id: "claudeAgent".into(),
+        model: slug.into(),
+        options: vec![],
+    })
+    .context_window
 }
 
 #[cfg(test)]
@@ -243,53 +268,127 @@ mod tests {
         ModelSelection {
             instance_id: "claudeAgent".into(),
             model: model.into(),
-            options: opts.iter().map(|(id, v)| OptionSelection { id: id.to_string(), value: v.clone() }).collect(),
+            options: opts
+                .iter()
+                .map(|(id, v)| OptionSelection {
+                    id: id.to_string(),
+                    value: v.clone(),
+                })
+                .collect(),
         }
     }
 
     #[test]
     fn picker_lists_match_composer_spec() {
         let all = models(Some("2.1.332"));
-        let names: Vec<&str> = all.iter().filter(|m| !m.is_legacy).map(|m| m.name.as_str()).collect();
-        assert_eq!(names, ["Claude Opus 5.5", "Claude Sonnet 5.5", "Claude Fable 5.2", "Claude Haiku 5.5"]);
+        let names: Vec<&str> = all
+            .iter()
+            .filter(|m| !m.is_legacy)
+            .map(|m| m.name.as_str())
+            .collect();
+        assert_eq!(
+            names,
+            [
+                "Claude Opus 5.5",
+                "Claude Sonnet 5.5",
+                "Claude Fable 5.2",
+                "Claude Haiku 5.5"
+            ]
+        );
         let opus = all.iter().find(|m| m.slug == "claude-opus-5-5").unwrap();
         assert!(opus.is_default);
         assert_eq!(opus.short_name.as_deref(), Some("Opus 5.5"));
         let effort = &opus.options[0];
         assert_eq!(effort.id, "effort");
         let labels: Vec<&str> = effort.choices.iter().map(|c| c.label.as_str()).collect();
-        assert_eq!(labels, ["Low", "Medium", "High", "Extra High", "Max", "Ultracode", "Ultrathink"]);
-        assert!(effort.choices.iter().find(|c| c.value == "medium").unwrap().is_default);
-        assert!(effort.choices.iter().find(|c| c.value == "ultrathink").unwrap().prompt_injected);
+        assert_eq!(
+            labels,
+            [
+                "Low",
+                "Medium",
+                "High",
+                "Extra High",
+                "Max",
+                "Ultracode",
+                "Ultrathink"
+            ]
+        );
+        assert!(
+            effort
+                .choices
+                .iter()
+                .find(|c| c.value == "medium")
+                .unwrap()
+                .is_default
+        );
+        assert!(
+            effort
+                .choices
+                .iter()
+                .find(|c| c.value == "ultrathink")
+                .unwrap()
+                .prompt_injected
+        );
         assert!(opus.options[1].boolean && opus.options[1].id == "fastMode");
         let haiku45 = all.iter().find(|m| m.slug == "claude-haiku-4-5").unwrap();
         assert_eq!(haiku45.options.len(), 1);
         assert_eq!(haiku45.options[0].id, "thinking");
         // Fable 5.2 needs 2.1.321.
-        assert!(!models(Some("2.1.300")).iter().any(|m| m.slug == "claude-fable-5-2"));
+        assert!(
+            !models(Some("2.1.300"))
+                .iter()
+                .any(|m| m.slug == "claude-fable-5-2")
+        );
     }
 
     #[test]
     fn selections_compile_to_flags() {
-        let c = compile(&sel("claude-opus-5-5", &[("effort", OptionValue::Str("ultracode".into())), ("fastMode", OptionValue::Bool(true))]));
+        let c = compile(&sel(
+            "claude-opus-5-5",
+            &[
+                ("effort", OptionValue::Str("ultracode".into())),
+                ("fastMode", OptionValue::Bool(true)),
+            ],
+        ));
         assert_eq!(c.api_model, "claude-opus-5-5");
         assert_eq!(c.effort.as_deref(), Some("xhigh"));
         assert_eq!(c.settings.get("ultracode"), Some(&json!(true)));
         assert_eq!(c.settings.get("fastMode"), Some(&json!(true)));
         assert_eq!(c.context_window, Some(1_000_000));
 
-        let c = compile(&sel("opus", &[("effort", OptionValue::Str("ultrathink".into()))]));
-        assert_eq!((c.api_model.as_str(), c.effort.as_deref(), c.prompt_prefix), ("claude-opus-5-5", None, Some("Ultrathink:\n")));
+        let c = compile(&sel(
+            "opus",
+            &[("effort", OptionValue::Str("ultrathink".into()))],
+        ));
+        assert_eq!(
+            (c.api_model.as_str(), c.effort.as_deref(), c.prompt_prefix),
+            ("claude-opus-5-5", None, Some("Ultrathink:\n"))
+        );
 
         let c = compile(&sel("claude-opus-4-6", &[]));
         assert_eq!(c.api_model, "claude-opus-4-6[1m]");
-        let c = compile(&sel("claude-opus-4-6", &[("contextWindow", OptionValue::Str("200k".into()))]));
-        assert_eq!((c.api_model.as_str(), c.context_window), ("claude-opus-4-6", Some(200_000)));
+        let c = compile(&sel(
+            "claude-opus-4-6",
+            &[("contextWindow", OptionValue::Str("200k".into()))],
+        ));
+        assert_eq!(
+            (c.api_model.as_str(), c.context_window),
+            ("claude-opus-4-6", Some(200_000))
+        );
 
-        let c = compile(&sel("claude-opus-4-7", &[("effort", OptionValue::Str("xhigh".into()))]));
+        let c = compile(&sel(
+            "claude-opus-4-7",
+            &[("effort", OptionValue::Str("xhigh".into()))],
+        ));
         assert_eq!(c.effort.as_deref(), Some("max"));
 
-        let c = compile(&sel("some-custom-model", &[("effort", OptionValue::Str("high".into()))]));
-        assert_eq!((c.api_model.as_str(), c.effort.as_deref()), ("some-custom-model", Some("high")));
+        let c = compile(&sel(
+            "some-custom-model",
+            &[("effort", OptionValue::Str("high".into()))],
+        ));
+        assert_eq!(
+            (c.api_model.as_str(), c.effort.as_deref()),
+            ("some-custom-model", Some("high"))
+        );
     }
 }
