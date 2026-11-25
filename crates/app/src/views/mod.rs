@@ -7,7 +7,8 @@
 //! |---|---|
 //! | `SidebarView` | the sidebar container (width, rail, collapse are the shell's); already wrapped in `Scope::Sidebar` |
 //! | `ChatView` | the chat column for Index / Draft / Thread routes: header (40px) and timeline |
-//! | `ComposerView` | under the chat view in the chat column |
+//! | `ComposerView` | under the chat view in the chat column (thread routes) |
+//! | `DraftView` | over the chat area for Index / Draft routes (centered composer) |
 //! | `TerminalDrawerView` | under the composer when the drawer is open; the shell draws the resize handle |
 //! | `DiffPanelView` | the right panel column when it is open; the shell draws the resize handle |
 //! | `SettingsView` | inside the settings modal surface (nav + content) |
@@ -19,6 +20,7 @@ pub mod command_palette;
 pub mod composer;
 pub mod details;
 pub mod diff_panel;
+pub mod draft;
 pub mod settings;
 pub mod sidebar;
 pub mod terminal;
@@ -28,6 +30,7 @@ pub use chat::ChatView;
 pub use command_palette::CommandPaletteView;
 pub use composer::ComposerView;
 pub use diff_panel::DiffPanelView;
+pub use draft::DraftView;
 pub use settings::SettingsView;
 pub use sidebar::SidebarView;
 pub use terminal_drawer::TerminalDrawerView;

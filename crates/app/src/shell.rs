@@ -23,8 +23,8 @@ use crate::ui::{
     ToggleSize, ToggleVariant, Tooltip, TooltipExt as _, TooltipSide, h_flex,
 };
 use crate::views::{
-    ChatView, CommandPaletteView, ComposerView, DiffPanelView, SettingsView, SidebarView,
-    TerminalDrawerView,
+    ChatView, CommandPaletteView, ComposerView, DiffPanelView, DraftView, SettingsView,
+    SidebarView, TerminalDrawerView,
 };
 
 actions!(
@@ -97,6 +97,7 @@ pub struct Shell {
     sidebar: Entity<SidebarView>,
     chat: Entity<ChatView>,
     composer: Entity<ComposerView>,
+    draft: Entity<DraftView>,
     diff_panel: Entity<DiffPanelView>,
     terminal: Entity<TerminalDrawerView>,
     settings: Entity<SettingsView>,
@@ -147,10 +148,13 @@ impl Shell {
         .detach();
         let focus = cx.focus_handle();
         focus.focus(window, cx);
+        let composer = cx.new(|cx| ComposerView::new(window, cx));
+        let draft = cx.new(|cx| DraftView::new(composer.clone(), window, cx));
         Self {
             sidebar: cx.new(|cx| SidebarView::new(window, cx)),
             chat: cx.new(|cx| ChatView::new(window, cx)),
-            composer: cx.new(|cx| ComposerView::new(window, cx)),
+            composer,
+            draft,
             diff_panel: cx.new(|cx| DiffPanelView::new(window, cx)),
             terminal: cx.new(|cx| TerminalDrawerView::new(window, cx)),
             settings: cx.new(|cx| SettingsView::new(window, cx)),
@@ -392,6 +396,7 @@ impl Shell {
     fn render_chat_column(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
         let app = self.app.read(cx);
         let drawer = app.drawer;
+        let hero = crate::views::draft::is_hero(app.chat_route());
         let t = *cx.tokens();
         let this = cx.entity().downgrade();
         div()
@@ -414,8 +419,28 @@ impl Shell {
                 .absolute()
                 .size_full(),
             )
-            .child(div().flex_1().min_h_0().child(self.chat.clone()))
-            .child(div().flex_none().child(self.composer.clone()))
+            .child(
+                div()
+                    .relative()
+                    .flex_1()
+                    .min_h_0()
+                    .child(self.chat.clone())
+                    // The new-thread hero centers the composer over the empty chat.
+                    .when(hero, |el| {
+                        el.child(
+                            div()
+                                .absolute()
+                                .top(layout::TOPBAR_HEIGHT)
+                                .left_0()
+                                .right_0()
+                                .bottom_0()
+                                .child(self.draft.clone()),
+                        )
+                    }),
+            )
+            .when(!hero, |el| {
+                el.child(div().flex_none().child(self.composer.clone()))
+            })
             .child(crate::views::details::details_card(
                 &self.details,
                 if drawer.open { drawer.size } else { px(0.) },
