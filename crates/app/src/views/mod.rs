@@ -12,10 +12,12 @@
 //! | `DiffPanelView` | the right panel column when it is open; the shell draws the resize handle |
 //! | `SettingsView` | inside the settings modal surface (nav + content) |
 //! | `CommandPaletteView` | inside the palette dialog surface when the palette is open |
+//! | `details::DetailsCard` | over the chat column, below the header, via `details::details_card` |
 
 pub mod chat;
 pub mod command_palette;
 pub mod composer;
+pub mod details;
 pub mod diff_panel;
 pub mod settings;
 pub mod sidebar;

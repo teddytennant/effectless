@@ -436,7 +436,7 @@ fn script(id: &str, name: &str, command: &str, icon: ProjectScriptIcon) -> Proje
         name: name.into(),
         command: command.into(),
         icon,
-        run_on_worktree_create: false,
+        ..Default::default()
     }
 }
 

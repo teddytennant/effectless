@@ -110,7 +110,36 @@ fn main() {
                     }
                 }
             });
-            store::Store::install(args.demo, cx);
+            let store = store::Store::install(args.demo, cx);
+            // Demo ids are random: `thread:<n>` / `thread:<title words>` and
+            // `draft:<project title>` find a match instead.
+            let resolved = {
+                let snapshot = store.read(cx).snapshot();
+                match &args.route {
+                    Route::Thread(key) if snapshot.thread(key).is_none() => {
+                        let key_lc = key.to_lowercase();
+                        key.parse::<usize>()
+                            .ok()
+                            .and_then(|n| snapshot.threads.get(n))
+                            .or_else(|| {
+                                snapshot
+                                    .threads
+                                    .iter()
+                                    .find(|t| t.thread.title.to_lowercase().contains(&key_lc))
+                            })
+                            .map(|t| Route::Thread(t.thread.id.clone()))
+                    }
+                    Route::Draft(key) if snapshot.project(key).is_none() => snapshot
+                        .projects
+                        .iter()
+                        .find(|p| p.title.eq_ignore_ascii_case(key))
+                        .map(|p| Route::Draft(p.id.clone())),
+                    _ => None,
+                }
+            };
+            if let Some(route) = resolved {
+                app.update(cx, |s, cx| s.replace(route, cx));
+            }
 
             // spec 02 §1.1: 1100 x 780 default, 400 x 360 minimum.
             let bounds = Bounds::centered(None, size(px(1100.), px(780.)), cx);

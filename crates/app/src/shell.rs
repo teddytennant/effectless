@@ -112,6 +112,7 @@ pub struct Shell {
     toasts: Entity<Toasts>,
     popups: Entity<ui::popup::PopupLayer>,
     tooltips: Entity<ui::tooltip::TooltipLayer>,
+    details: Entity<crate::views::details::DetailsCard>,
     focus: FocusHandle,
     drag: Option<Drag>,
     /// The sidebar is being dragged below the collapse threshold.
@@ -165,6 +166,7 @@ impl Shell {
             toasts: ui::toast::new_host(cx),
             popups: ui::popup::new_layer(cx),
             tooltips: ui::tooltip::new_layer(cx),
+            details: cx.new(|cx| crate::views::details::DetailsCard::new(window, cx)),
             app,
             store,
             focus,
@@ -420,6 +422,10 @@ impl Shell {
             )
             .child(div().flex_1().min_h_0().child(self.chat.clone()))
             .child(div().flex_none().child(self.composer.clone()))
+            .child(crate::views::details::details_card(
+                &self.details,
+                if drawer.open { drawer.size } else { px(0.) },
+            ))
             .when(drawer.open, |el| {
                 el.child(
                     div()

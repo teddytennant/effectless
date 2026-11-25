@@ -520,6 +520,7 @@ pub(crate) fn thread_of(command: &Command) -> Option<&str> {
         | Command::SetPinned { thread_id, .. }
         | Command::SetSettled { thread_id, .. }
         | Command::SetArchived { thread_id, .. }
+        | Command::SetThreadBranch { thread_id, .. }
         | Command::DeleteThread { thread_id }
         | Command::MarkVisited { thread_id }
         | Command::MarkUnread { thread_id }

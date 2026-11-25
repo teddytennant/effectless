@@ -268,7 +268,7 @@ impl ModelSelection {
 
 // ---- projects and threads ----
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct ProjectScript {
     pub id: String,
@@ -278,6 +278,18 @@ pub struct ProjectScript {
     pub icon: ProjectScriptIcon,
     #[serde(default)]
     pub run_on_worktree_create: bool,
+    /// Setup must finish before the agent starts (T3's `async: false`).
+    #[serde(default)]
+    pub blocking_setup: bool,
+    /// Runs in the thread's worktree when the thread settles.
+    #[serde(default)]
+    pub run_on_settle: bool,
+    #[serde(default)]
+    pub stop_on_settle: bool,
+    #[serde(default)]
+    pub preview_url: Option<String>,
+    #[serde(default)]
+    pub auto_open_preview: bool,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
