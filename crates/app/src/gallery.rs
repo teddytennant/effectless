@@ -90,12 +90,12 @@ fn open_overlays(which: &str, window: &mut Window, cx: &mut App) {
                 });
             }
             "confirm" => {
-                let _ = Dialogs::confirm(
+                drop(Dialogs::confirm(
                     "Delete thread \"Fix flaky CI\"?\nThis permanently clears conversation history for this thread.",
                     ConfirmOptions::destructive(),
                     window,
                     cx,
-                );
+                ));
             }
             "toast" => {
                 Toasts::push(
@@ -354,12 +354,12 @@ impl Render for GalleryView {
                         ))
                         .child(Button::new("open-confirm").variant(ButtonVariant::DestructiveOutline).label("Confirm").on_click(
                             |_, window, cx| {
-                                let _ = Dialogs::confirm(
+                                drop(Dialogs::confirm(
                                     "Delete thread \"Fix flaky CI\"?\nThis permanently clears conversation history for this thread.",
                                     ConfirmOptions::destructive(),
                                     window,
                                     cx,
-                                );
+                                ));
                             },
                         ))
                         .child(Button::new("toast-err").variant(ButtonVariant::Outline).label("Error toast").on_click(

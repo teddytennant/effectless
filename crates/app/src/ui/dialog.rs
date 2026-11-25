@@ -101,7 +101,7 @@ pub struct Dialog {
     close_button: bool,
     alert: bool,
     max_width: Pixels,
-    on_close: Option<Rc<dyn Fn(&mut Window, &mut App)>>,
+    on_close: Option<super::WindowHandler>,
 }
 
 impl Dialog {

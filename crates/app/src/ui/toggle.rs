@@ -50,7 +50,7 @@ pub struct Toggle {
     disabled: bool,
     variant: ToggleVariant,
     size: ToggleSize,
-    on_click: Option<Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>>,
+    on_click: Option<super::ClickHandler>,
 }
 
 impl Toggle {

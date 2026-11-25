@@ -58,7 +58,7 @@ pub enum MenuItem {
         row: Box<MenuRow>,
         menu: Rc<Menu>,
     },
-    Custom(Rc<dyn Fn(&mut Window, &mut App) -> AnyElement>),
+    Custom(super::ElementBuilder),
 }
 
 #[derive(Clone, Default)]
@@ -74,6 +74,7 @@ pub struct MenuRow {
 }
 
 impl MenuItem {
+    #[allow(clippy::new_ret_no_self)]
     pub fn new(label: impl Into<SharedString>) -> MenuRowBuilder {
         MenuRowBuilder(MenuRow {
             label: label.into(),

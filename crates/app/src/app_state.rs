@@ -11,7 +11,7 @@
 //! state.update(cx, |s, cx| s.toggle_right_panel(cx));
 //! ```
 
-use gpui::{App, AppContext as _, Context, Entity, Global, Pixels, Window, px};
+use gpui::{App, AppContext as _, Context, Entity, Global, Pixels, Window};
 
 use crate::theme::{Theme, ThemeMode};
 use tern_core::{ProjectId, ThreadId};
@@ -488,6 +488,7 @@ impl AppState {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use gpui::px;
 
     #[test]
     fn parses_routes() {

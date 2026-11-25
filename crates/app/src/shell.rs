@@ -393,7 +393,7 @@ impl Shell {
             .into_any_element()
     }
 
-    fn render_chat_column(&mut self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
+    fn render_chat_column(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
         let app = self.app.read(cx);
         let drawer = app.drawer;
         let t = *cx.tokens();
@@ -603,7 +603,7 @@ impl Shell {
                     .icon(icon)
                     .pressed(pressed)
                     .disabled(!enabled)
-                    .on_click(move |_, _, cx| app.update(cx, |s, cx| act(s, cx))),
+                    .on_click(move |_, _, cx| app.update(cx, act)),
             )
             .into_any_element()
     }

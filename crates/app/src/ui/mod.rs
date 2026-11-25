@@ -58,11 +58,18 @@ use std::cell::Cell;
 use std::rc::Rc;
 
 use gpui::{
-    App, Bounds, BoxShadow, Div, Hsla, IntoElement, ParentElement, Pixels, Styled, canvas, div,
+    App, Bounds, BoxShadow, Div, Hsla, IntoElement, Pixels, Styled, canvas, div,
     point, px,
 };
 
 use crate::theme::ActiveTheme as _;
+
+/// A click handler shared by builders (`on_click`).
+pub type ClickHandler = Rc<dyn Fn(&gpui::ClickEvent, &mut gpui::Window, &mut App)>;
+/// A callback with window access (menu selections, toast actions).
+pub type WindowHandler = Rc<dyn Fn(&mut gpui::Window, &mut App)>;
+/// Builds an element on demand (custom menu rows, tooltip content).
+pub type ElementBuilder = Rc<dyn Fn(&mut gpui::Window, &mut App) -> gpui::AnyElement>;
 
 /// Every disabled control paints at 64% opacity and takes no pointer events.
 pub const DISABLED_OPACITY: f32 = 0.64;

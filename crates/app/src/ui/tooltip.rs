@@ -50,7 +50,7 @@ pub enum TooltipVariant {
 #[derive(Clone)]
 enum Content {
     Text(SharedString),
-    Custom(Rc<dyn Fn(&mut Window, &mut App) -> AnyElement>),
+    Custom(super::ElementBuilder),
 }
 
 /// What a trigger shows. Cheap to clone.

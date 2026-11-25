@@ -213,7 +213,7 @@ pub struct Button {
     pressed: bool,
     loading: bool,
     full_width: bool,
-    on_click: Option<Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>>,
+    on_click: Option<super::ClickHandler>,
     tooltip: Option<Tooltip>,
     focus: Option<FocusHandle>,
     style: StyleRefinement,
@@ -656,7 +656,7 @@ pub struct InlineButton {
     label: SharedString,
     icon_end: Option<IconName>,
     open: bool,
-    on_click: Option<Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>>,
+    on_click: Option<super::ClickHandler>,
     style: StyleRefinement,
 }
 
