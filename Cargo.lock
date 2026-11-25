@@ -6536,6 +6536,8 @@ dependencies = [
  "gpui-pre",
  "gpui-pre-platform",
  "image",
+ "serde",
+ "serde_json",
  "tern-core",
  "tern-engine",
 ]
