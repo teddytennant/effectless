@@ -19,6 +19,7 @@ pub mod composer;
 pub mod diff_panel;
 pub mod settings;
 pub mod sidebar;
+pub mod terminal;
 pub mod terminal_drawer;
 
 pub use chat::ChatView;

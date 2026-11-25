@@ -54,6 +54,7 @@ pub fn bind_keys(cx: &mut App) {
         KeyBinding::new("ctrl-]", GoForward, Some("Workspace")),
         KeyBinding::new("escape", Dismiss, Some("Workspace")),
     ]);
+    crate::views::terminal::bind_keys(cx);
 }
 
 /// Whether Tern draws its own window controls (client-side decorations).
@@ -427,16 +428,17 @@ impl Shell {
                         .flex_none()
                         .h(drawer.size)
                         .border_t_1()
-                        .border_color(t.border)
+                        .border_color(t.border.opacity(0.8))
                         .child(self.terminal.clone())
                         .child(
+                            // spec 05 §3.6: 6px, overlapping the top edge.
                             div()
                                 .id("drawer-handle")
                                 .absolute()
                                 .left_0()
                                 .right_0()
-                                .top(px(-4.))
-                                .h(px(8.))
+                                .top_0()
+                                .h(px(6.))
                                 .cursor(CursorStyle::ResizeUpDown)
                                 .on_mouse_down(
                                     MouseButton::Left,

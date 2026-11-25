@@ -49,6 +49,8 @@ pub enum StoreEvent {
 
 pub struct Store {
     backend: Backend,
+    /// Started with `--demo`: project paths are made up.
+    demo: bool,
     snapshot: Snapshot,
     threads: RefCell<HashMap<ThreadId, Rc<ThreadDetail>>>,
 }
@@ -111,6 +113,7 @@ impl Store {
             };
             Store {
                 backend,
+                demo,
                 snapshot,
                 threads: RefCell::new(HashMap::new()),
             }
@@ -121,6 +124,11 @@ impl Store {
 
     pub fn global(cx: &App) -> Entity<Store> {
         cx.global::<GlobalStore>().0.clone()
+    }
+
+    /// Demo or fixture data, whose project folders don't exist on this machine.
+    pub fn is_demo(&self) -> bool {
+        self.demo || self.is_fixture()
     }
 
     pub fn is_fixture(&self) -> bool {
