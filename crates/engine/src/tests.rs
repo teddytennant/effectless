@@ -1187,6 +1187,24 @@ fn renamed_thread_keeps_its_title() {
 }
 
 #[test]
+fn set_thread_branch_records_checkout() {
+    let h = harness();
+    let id = h.launch(None);
+    h.engine.send(Command::SetThreadBranch {
+        thread_id: id.clone(),
+        branch: Some("feature/x".into()),
+        worktree_path: Some("/tmp/wt".into()),
+    });
+    h.wait("branch", |e| {
+        (e.thread(&id)?.thread.branch.as_deref() == Some("feature/x")).then_some(())
+    });
+    assert_eq!(
+        h.detail(&id).thread.worktree_path.as_deref(),
+        Some("/tmp/wt")
+    );
+}
+
+#[test]
 fn sidebar_flags_and_unread() {
     let h = harness();
     let (id, run) = h.running("one");

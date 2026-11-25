@@ -133,7 +133,7 @@ fn project_crud() {
         name: "Test".into(),
         command: "cargo test".into(),
         icon: ProjectScriptIcon::Test,
-        run_on_worktree_create: false,
+        ..Default::default()
     });
     store.upsert_project(&p).unwrap();
     assert_eq!(store.project_by_root("/src/tern").unwrap(), Some(p.clone()));

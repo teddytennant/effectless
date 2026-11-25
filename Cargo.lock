@@ -6536,9 +6536,13 @@ dependencies = [
  "gpui-pre",
  "gpui-pre-platform",
  "image",
+ "serde_json",
  "tern-core",
  "tern-engine",
+ "tern-git",
+ "tern-providers",
  "tern-terminal",
+ "tokio",
 ]
 
 [[package]]

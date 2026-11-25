@@ -13,8 +13,10 @@
 
 use gpui::{App, AppContext as _, Context, Entity, Global, Pixels, Window};
 
+use std::collections::HashMap;
+
 use crate::theme::{Theme, ThemeMode};
-use tern_core::{ProjectId, ThreadId};
+use tern_core::{ProjectId, ThreadEnvMode, ThreadId};
 
 /// Settings pages, in nav order (spec 06).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -195,6 +197,44 @@ pub struct PanelLayout {
     pub size: Pixels,
 }
 
+/// Workspace choices for a draft (spec/05 §4a.3), keyed by project. The thread
+/// details card writes them; the composer reads them when it launches the thread.
+#[derive(Clone, Debug, PartialEq)]
+pub struct DraftWorkspace {
+    pub env_mode: ThreadEnvMode,
+    /// The branch to start from (worktree mode) or the checked-out branch.
+    pub branch: Option<String>,
+    /// An existing worktree the draft points at.
+    pub worktree_path: Option<String>,
+    /// `newWorktreesStartFromOrigin`, default true.
+    pub start_from_origin: bool,
+}
+
+impl Default for DraftWorkspace {
+    fn default() -> Self {
+        Self {
+            env_mode: ThreadEnvMode::Local,
+            branch: None,
+            worktree_path: None,
+            start_from_origin: true,
+        }
+    }
+}
+
+/// A command for a drawer terminal (project scripts, spec/05 §6.2). The terminal
+/// drawer takes these with [`AppState::take_terminal_requests`].
+#[derive(Clone, Debug, PartialEq)]
+pub struct TerminalRequest {
+    pub cwd: String,
+    /// Written to the shell as `" " + command + "\r"` (the space keeps it out of history).
+    pub command: String,
+    pub env: Vec<(String, String)>,
+    /// Open a new terminal instead of reusing an idle one (`stopOnSettle` scripts).
+    pub new_terminal: bool,
+    /// The script name, for errors: `Failed to run script "{name}".`
+    pub name: String,
+}
+
 pub struct AppState {
     route: Route,
     /// The chat route under the settings modal.
@@ -206,6 +246,12 @@ pub struct AppState {
     pub right_panel_maximized: bool,
     /// The thread details panel (top right card), toggled from the titlebar.
     pub thread_details_open: bool,
+    /// Whether the card fits inline; the card writes this as it lays out. When it
+    /// does not, the toggle opens it as a popover instead.
+    pub thread_details_inline: bool,
+    pub thread_details_popover_open: bool,
+    drafts: HashMap<ProjectId, DraftWorkspace>,
+    terminal_requests: Vec<TerminalRequest>,
     pub drawer: PanelLayout,
     pub palette_open: bool,
     theme_mode: ThemeMode,
@@ -236,6 +282,10 @@ impl AppState {
             },
             right_panel_maximized: false,
             thread_details_open: true,
+            thread_details_inline: true,
+            thread_details_popover_open: false,
+            drafts: HashMap::new(),
+            terminal_requests: Vec::new(),
             drawer: PanelLayout {
                 open: false,
                 size: drawer::DEFAULT_HEIGHT,
@@ -424,9 +474,39 @@ impl AppState {
         }
     }
 
+    /// Inline: shows or hides the card. Otherwise opens or closes the popover.
     pub fn toggle_thread_details(&mut self, cx: &mut Context<Self>) {
-        self.thread_details_open = !self.thread_details_open;
+        if self.thread_details_inline {
+            self.thread_details_open = !self.thread_details_open;
+        } else {
+            self.thread_details_popover_open = !self.thread_details_popover_open;
+        }
         cx.notify();
+    }
+
+    pub fn draft_workspace(&self, project: &str) -> DraftWorkspace {
+        self.drafts.get(project).cloned().unwrap_or_default()
+    }
+
+    pub fn set_draft_workspace(
+        &mut self,
+        project: &str,
+        workspace: DraftWorkspace,
+        cx: &mut Context<Self>,
+    ) {
+        self.drafts.insert(project.to_string(), workspace);
+        cx.notify();
+    }
+
+    /// Opens the drawer and queues `request` for the terminal drawer.
+    pub fn run_in_terminal(&mut self, request: TerminalRequest, cx: &mut Context<Self>) {
+        self.terminal_requests.push(request);
+        self.drawer.open = true;
+        cx.notify();
+    }
+
+    pub fn take_terminal_requests(&mut self) -> Vec<TerminalRequest> {
+        std::mem::take(&mut self.terminal_requests)
     }
 
     // --- terminal drawer -----------------------------------------------------

@@ -603,6 +603,15 @@ impl ThreadActor {
                 self.d.thread.pinned_at = pinned.then(now);
                 self.dirty.thread = true;
             }
+            Command::SetThreadBranch {
+                branch,
+                worktree_path,
+                ..
+            } => {
+                self.d.thread.branch = branch;
+                self.d.thread.worktree_path = worktree_path;
+                self.dirty.thread = true;
+            }
             Command::SetSettled { settled, .. } => {
                 self.d.thread.settled_at = settled.then(now);
                 self.dirty.thread = true;

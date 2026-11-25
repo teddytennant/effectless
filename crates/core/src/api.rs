@@ -218,6 +218,12 @@ pub enum Command {
         thread_id: ThreadId,
         archived: bool,
     },
+    /// Record the thread's checkout after a branch switch (spec/05 §4a.8).
+    SetThreadBranch {
+        thread_id: ThreadId,
+        branch: Option<String>,
+        worktree_path: Option<String>,
+    },
     DeleteThread {
         thread_id: ThreadId,
     },
