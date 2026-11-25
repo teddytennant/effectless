@@ -18,3 +18,4 @@ tracing.workspace = true
 parking_lot.workspace = true
 dirs.workspace = true
 chrono.workspace = true
+async-trait = "0.1"
